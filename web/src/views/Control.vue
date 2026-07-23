@@ -19,8 +19,8 @@
       <p class="meta">状态：{{ running == null ? '未知' : (running ? '运行中' : '未运行') }}</p>
       <div class="toolbar" style="margin-top:0.75rem">
         <button class="btn" @click="checkProcess">刷新状态</button>
-        <button class="btn primary" @click="startProcess">启动</button>
-        <button class="btn danger" @click="stopProcess">结束进程</button>
+        <button class="btn primary" @click="startProcess" :disabled="running === true">启动</button>
+        <button class="btn danger" @click="stopProcess" :disabled="running === false">结束进程</button>
       </div>
     </div>
   </div>
@@ -68,6 +68,7 @@ async function checkProcess() {
 }
 
 async function startProcess() {
+  if (running.value) return
   try { await api.processStart(id()); toast('已启动'); await checkProcess() }
   catch (e: any) { toast(e.message, 'error') }
 }

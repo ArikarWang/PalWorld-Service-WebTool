@@ -36,6 +36,9 @@ export const api = {
   serverMonitor: (id: string) => request<any>(`/servers/${id}/monitor`),
   refreshServerMonitor: (id: string) => request<any>(`/servers/${id}/monitor/refresh`, { method: 'POST' }),
   players: (id: string) => request<any[]>(`/servers/${id}/players`),
+  playerPals: (id: string, playerKey: string) =>
+    request<any>(`/servers/${id}/players/${encodeURIComponent(playerKey)}/pals`),
+  health: () => request<{ status: string }>('/health'),
   announce: (id: string, message: string) =>
     request(`/servers/${id}/announce`, { method: 'POST', body: JSON.stringify({ message }) }),
   save: (id: string) => request(`/servers/${id}/save`, { method: 'POST' }),

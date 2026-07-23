@@ -68,11 +68,14 @@ public sealed class StringOrNumberJsonConverter : JsonConverter<string?>
 public record PalPlayer
 {
     public string? Name { get; init; }
+    public string? AccountName { get; init; }
+    public string? PlayerId { get; init; }
     public string? PlayerUid { get; init; }
     public string? UserId { get; init; }
     public string? Ip { get; init; }
     public int Ping { get; init; }
     public int Level { get; init; }
+    public int BuildingCount { get; init; }
     public PalPlayerLocation? Location { get; init; }
 }
 

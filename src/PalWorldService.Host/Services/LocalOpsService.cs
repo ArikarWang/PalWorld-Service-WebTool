@@ -68,6 +68,40 @@ public class LocalOpsService
             p.Kill(entireProcessTree: true);
     }
 
+    /// <summary>
+    /// List player save files under SaveGames/**/Players/*.sav (offline roster source).
+    /// </summary>
+    public IReadOnlyList<SavePlayerEntry> ListPlayersFromSaves(ServerConfig server)
+    {
+        if (string.IsNullOrWhiteSpace(server.SaveDirectory) || !Directory.Exists(server.SaveDirectory))
+            return [];
+
+        try
+        {
+            return Directory.GetFiles(server.SaveDirectory, "*.sav", SearchOption.AllDirectories)
+                .Where(f =>
+                {
+                    var dir = Path.GetFileName(Path.GetDirectoryName(f));
+                    return string.Equals(dir, "Players", StringComparison.OrdinalIgnoreCase);
+                })
+                .Select(f =>
+                {
+                    var info = new FileInfo(f);
+                    var id = Path.GetFileNameWithoutExtension(f);
+                    return new SavePlayerEntry(id, info.LastWriteTimeUtc, info.Length);
+                })
+                .GroupBy(p => p.PlayerId, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderByDescending(x => x.LastWriteUtc).First())
+                .OrderByDescending(p => p.LastWriteUtc)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to scan player saves for {Server}", server.Id);
+            return [];
+        }
+    }
+
     public async Task<BackupInfo> CreateBackupAsync(ServerConfig server, CancellationToken ct)
     {
         EnsurePath(server.SaveDirectory, "saveDirectory", isDir: true);
@@ -143,3 +177,5 @@ public class LocalOpsService
 }
 
 public record BackupInfo(string FileName, string FullPath, long SizeBytes, DateTime CreatedAtUtc);
+
+public record SavePlayerEntry(string PlayerId, DateTime LastWriteUtc, long SizeBytes);

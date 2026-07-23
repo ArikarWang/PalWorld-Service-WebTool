@@ -51,6 +51,7 @@ builder.Services.AddSingleton(new AppConfigProvider(appConfig));
 builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<MonitorService>();
 builder.Services.AddSingleton<LocalOpsService>();
+builder.Services.AddSingleton<PlayerRosterService>();
 builder.Services.AddSingleton<ScheduleStore>();
 builder.Services.AddSingleton<ScheduleExecutor>();
 builder.Services.AddHttpClient("Palworld", c => c.Timeout = TimeSpan.FromSeconds(15));

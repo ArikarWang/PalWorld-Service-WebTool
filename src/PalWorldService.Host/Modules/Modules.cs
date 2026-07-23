@@ -133,11 +133,31 @@ public static class ServerOpsModule
     {
         var g = app.MapGroup("/api/servers/{serverId}").RequireServerSession();
 
-        g.MapGet("/players", async (string serverId, AppConfigProvider config, IPalworldRestClient client, CancellationToken ct) =>
+        g.MapGet("/players", async (string serverId, AppConfigProvider config, PlayerRosterService roster, CancellationToken ct) =>
         {
             var s = config.GetServer(serverId);
             if (s is null) return Results.NotFound();
-            return Results.Ok(await client.GetPlayersAsync(s, ct));
+            return Results.Ok(await roster.GetRosterAsync(s, ct));
+        });
+
+        g.MapGet("/players/{playerKey}/pals", (string serverId, string playerKey, AppConfigProvider config) =>
+        {
+            var s = config.GetServer(serverId);
+            if (s is null) return Results.NotFound();
+
+            // Feasibility: official REST has no per-player Pal inventory / IV scores.
+            // GameData API only exposes world-actor snapshots (positions), not party/box + potential.
+            // Full feature needs 1.0 save parsing (Oodle/.sav) — planned separately.
+            return Results.Ok(new PlayerPalsResult
+            {
+                Supported = false,
+                Status = "requires_save_parser",
+                Message =
+                    "当前版本无法可靠读取玩家帕鲁列表与潜能评分。" +
+                    "官方 REST API 仅提供在线玩家；GameData API（-enable-gamedata-api）主要是世界坐标快照，不含背包/帕鲁箱与潜能。" +
+                    "完整能力需要解析 SaveGames 玩家存档（后续版本实现）。",
+                Pals = []
+            });
         });
 
         g.MapPost("/announce", async (string serverId, MessageBody body, AppConfigProvider config, IPalworldRestClient client, CancellationToken ct) =>

@@ -1,4 +1,4 @@
-listen: "0.0.0.0:5080"
+﻿listen: "0.0.0.0:5080"
 dataDirectory: "data"
 backupDirectory: "backups"
 monitorIntervalSeconds: 30
