@@ -1,0 +1,29 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## Node
+web/node_modules/
+web/dist/
+
+## Runtime
+data/
+backups/
+logs/
+*.db
+*.log
+
+## Publish
+publish/
+
+## OS
+Thumbs.db
+.DS_Store
+
+## Secrets (optional local overrides)
+config/servers.local.yaml
+
+publish.zip

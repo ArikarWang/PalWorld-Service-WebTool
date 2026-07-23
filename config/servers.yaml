@@ -1,0 +1,19 @@
+listen: "0.0.0.0:5080"
+dataDirectory: "data"
+backupDirectory: "backups"
+monitorIntervalSeconds: 30
+
+servers:
+  - id: main
+    name: 本机帕鲁服务器
+    host: 127.0.0.1
+    restApiPort: 8212
+    gamePort: 8211
+    # 帕鲁 REST API 密码（AdminPassword），不会返回给浏览器
+    adminPassword: "change-me-rest"
+    # 网页登录该服的密码（与 adminPassword 无关）
+    webPassword: "change-me-web"
+    executablePath: "C:/gameserver/steamcmd/steamapps/common/PalServer/PalServer.exe"
+    configPath: "C:/gameserver/steamcmd/steamapps/common/PalServer/Pal/Saved/Config/WindowsServer/PalWorldSettings.ini"
+    logDirectory: "C:/gameserver/steamcmd/steamapps/common/PalServer/Pal/Saved/Logs"
+    saveDirectory: "C:/gameserver/steamcmd/steamapps/common/PalServer/Pal/Saved/SaveGames"

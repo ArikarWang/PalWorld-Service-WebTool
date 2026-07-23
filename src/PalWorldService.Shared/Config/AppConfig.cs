@@ -1,0 +1,32 @@
+namespace PalWorldService.Shared.Config;
+
+public class AppConfig
+{
+    public string Listen { get; set; } = "0.0.0.0:5080";
+    public string DataDirectory { get; set; } = "data";
+    public string BackupDirectory { get; set; } = "backups";
+    public int MonitorIntervalSeconds { get; set; } = 30;
+    public List<ServerConfig> Servers { get; set; } = [];
+}
+
+public class ServerConfig
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Host { get; set; } = "127.0.0.1";
+    public int RestApiPort { get; set; } = 8212;
+    public int GamePort { get; set; } = 8211;
+
+    /// <summary>帕鲁 REST API AdminPassword，不下发到前端</summary>
+    public string AdminPassword { get; set; } = string.Empty;
+
+    /// <summary>网页登录该服的密码，与 AdminPassword 无关</summary>
+    public string WebPassword { get; set; } = string.Empty;
+
+    public string? ExecutablePath { get; set; }
+    public string? ConfigPath { get; set; }
+    public string? LogDirectory { get; set; }
+    public string? SaveDirectory { get; set; }
+
+    public string RestApiBaseUrl => $"http://{Host}:{RestApiPort}/v1/api";
+}

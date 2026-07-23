@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>PalWorldService.Host</RootNamespace>
+    <AssemblyName>PalWorldService</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PalWorldService.Shared\PalWorldService.Shared.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Cronos" Version="0.8.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\config\servers.yaml" Link="config\servers.yaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
