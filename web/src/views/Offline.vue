@@ -9,48 +9,75 @@
       </p>
       <p>请在 mini 主机上重新双击部署目录中的 <code>start.bat</code>，然后点击下方按钮。</p>
       <div class="toolbar" style="justify-content:center;margin-top:1.25rem">
-        <button class="btn primary" @click="retry" :disabled="checking">
-          {{ checking ? '检测中…' : '重新检测连接' }}
+        <button class="btn primary" @click="retry(true)" :disabled="checking || leaving">
+          {{ checking || leaving ? '检测中…' : '重新检测连接' }}
         </button>
       </div>
-      <p v-if="error" class="error">{{ error }}</p>
-      <p v-if="ok" class="ok">已恢复，正在跳转…</p>
+      <p v-if="error && !leaving" class="error">{{ error }}</p>
+      <p v-if="leaving" class="ok">已恢复，正在跳转…</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
 
 const router = useRouter()
+const route = useRoute()
 const checking = ref(false)
+const leaving = ref(false)
 const error = ref('')
-const ok = ref(false)
 let timer: number | undefined
+let disposed = false
 
-async function retry() {
+function stopTimer() {
+  if (timer !== undefined) {
+    clearInterval(timer)
+    timer = undefined
+  }
+}
+
+async function retry(manual = false) {
+  if (disposed || checking.value || leaving.value) return
   checking.value = true
   error.value = ''
   try {
     await api.health()
-    ok.value = true
-    setTimeout(() => router.replace('/'), 600)
+    if (disposed) return
+
+    // Recovered: stop polling and leave this page
+    leaving.value = true
+    stopTimer()
+    sessionStorage.setItem('pal.recoveredAt', String(Date.now()))
+    await router.replace({ name: 'home' })
+
+    // If still here (guard bounced us back), clear the sticky message
+    if (!disposed && route.name === 'offline') {
+      leaving.value = false
+      error.value = manual
+        ? '服务已响应，但页面跳转失败，请手动打开首页或刷新'
+        : '服务已响应，稍后将重试跳转'
+    }
   } catch {
-    error.value = '仍未检测到服务，请确认已运行 start.bat'
+    if (!disposed) {
+      leaving.value = false
+      error.value = '仍未检测到服务，请确认已运行 start.bat'
+    }
   } finally {
     checking.value = false
   }
 }
 
 onMounted(() => {
-  retry()
-  timer = window.setInterval(retry, 5000)
+  retry(false)
+  timer = window.setInterval(() => retry(false), 5000)
 })
 
 onUnmounted(() => {
-  if (timer) clearInterval(timer)
+  disposed = true
+  stopTimer()
 })
 </script>
 

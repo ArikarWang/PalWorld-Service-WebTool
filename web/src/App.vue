@@ -33,6 +33,8 @@ provide('toast', showToast)
 
 async function checkHealth() {
   if (route.name === 'offline') return
+  const recoveredAt = Number(sessionStorage.getItem('pal.recoveredAt') || 0)
+  if (recoveredAt > 0 && Date.now() - recoveredAt < 10000) return
   try {
     await api.health()
   } catch {

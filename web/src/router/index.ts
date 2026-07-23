@@ -41,10 +41,15 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   if (to.name === 'offline') return true
 
-  // If API is down, force offline page (except when already going there)
+  // Brief grace after recovery to avoid bounce-back races
+  const recoveredAt = Number(sessionStorage.getItem('pal.recoveredAt') || 0)
+  const inGrace = recoveredAt > 0 && Date.now() - recoveredAt < 10000
+
   try {
     await api.health()
+    if (inGrace) sessionStorage.removeItem('pal.recoveredAt')
   } catch {
+    if (inGrace) return true
     return { name: 'offline' }
   }
 
@@ -57,6 +62,7 @@ router.beforeEach(async (to) => {
       return { name: 'login', params: { id }, query: { redirect: to.fullPath } }
     }
   } catch {
+    if (inGrace) return true
     return { name: 'offline' }
   }
   return true
