@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -36,6 +37,18 @@ public class ToolUpdateCheckService
         return asm.GetName().Version?.ToString(3) ?? "0.0.0";
     }
 
+    public string? GetGithubProxy() => NormalizeProxy(_config.Current.GithubProxy);
+
+    /// <summary>Apply optional githubProxy prefix to a GitHub URL.</summary>
+    public string ResolveGithubUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return url;
+        var proxy = GetGithubProxy();
+        if (string.IsNullOrWhiteSpace(proxy)) return url;
+        if (url.StartsWith(proxy, StringComparison.OrdinalIgnoreCase)) return url;
+        return proxy + url;
+    }
+
     public async Task<ToolUpdateCheckResult> CheckAsync(CancellationToken ct = default)
     {
         var current = NormalizeVersion(GetCurrentVersion());
@@ -48,10 +61,9 @@ public class ToolUpdateCheckService
 
         try
         {
+            var apiUrl = ResolveGithubUrl($"https://api.github.com/repos/{owner}/{repo}/releases/latest");
             var client = _httpClientFactory.CreateClient("GitHub");
-            using var request = new HttpRequestMessage(
-                HttpMethod.Get,
-                $"https://api.github.com/repos/{owner}/{repo}/releases/latest");
+            using var request = new HttpRequestMessage(HttpMethod.Get, apiUrl);
             request.Headers.UserAgent.Add(new ProductInfoHeaderValue("PalWorldService", current));
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
 
@@ -89,7 +101,8 @@ public class ToolUpdateCheckService
                     if (!string.Equals(an, ToolSelfUpdateService.ReleaseAssetName, StringComparison.OrdinalIgnoreCase))
                         continue;
                     assetName = an;
-                    downloadUrl = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
+                    var rawDownload = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
+                    downloadUrl = string.IsNullOrWhiteSpace(rawDownload) ? null : ResolveGithubUrl(rawDownload);
                     if (asset.TryGetProperty("size", out var sz) && sz.TryGetInt64(out var size))
                         assetSize = size;
                     break;
@@ -140,8 +153,63 @@ public class ToolUpdateCheckService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Tool update check failed");
-            return Fail(current, $"检查管理工具更新失败：{ex.Message}");
+            return Fail(current, FormatNetworkError(ex));
         }
+    }
+
+    internal static string FormatNetworkError(Exception ex)
+    {
+        var text = FlattenExceptionMessage(ex);
+        if (IsGithubConnectivityFailure(ex, text))
+        {
+            return "无法连接 GitHub（github.com:443 超时或被拦截）。" +
+                   "请在 config/servers.yaml 配置 githubProxy 后重试，例如：githubProxy: \"https://ghproxy.net/\"。" +
+                   $" 原始错误：{text}";
+        }
+
+        return $"检查管理工具更新失败：{text}";
+    }
+
+    private static bool IsGithubConnectivityFailure(Exception ex, string text)
+    {
+        if (ex is HttpRequestException or TaskCanceledException or SocketException or IOException)
+        {
+            if (text.Contains("github.com", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("443", StringComparison.Ordinal) ||
+                text.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("Timeout", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("没有正确答复", StringComparison.Ordinal) ||
+                text.Contains("连接尝试失败", StringComparison.Ordinal) ||
+                text.Contains("积极拒绝", StringComparison.Ordinal) ||
+                text.Contains("Name or service not known", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("No such host", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return text.Contains("github.com", StringComparison.OrdinalIgnoreCase) &&
+               (text.Contains("连接", StringComparison.Ordinal) ||
+                text.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("443", StringComparison.Ordinal));
+    }
+
+    private static string FlattenExceptionMessage(Exception ex)
+    {
+        var parts = new List<string>();
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (!string.IsNullOrWhiteSpace(e.Message) &&
+                (parts.Count == 0 || !parts[^1].Contains(e.Message, StringComparison.Ordinal)))
+                parts.Add(e.Message.Trim());
+        }
+        return string.Join(" → ", parts);
+    }
+
+    private static string? NormalizeProxy(string? proxy)
+    {
+        if (string.IsNullOrWhiteSpace(proxy)) return null;
+        var p = proxy.Trim();
+        if (!p.EndsWith('/')) p += "/";
+        return p;
     }
 
     private static ToolUpdateCheckResult Fail(string current, string message) => new(

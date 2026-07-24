@@ -58,7 +58,18 @@ public class ToolSelfUpdateService
             check.LatestVersion,
             check.DownloadUrl);
 
-        await DownloadAsync(check.DownloadUrl!, zipPath, ct);
+        try
+        {
+            await DownloadAsync(check.DownloadUrl!, zipPath, ct);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(ToolUpdateCheckService.FormatNetworkError(ex).Replace(
+                "检查管理工具更新失败：",
+                "下载更新失败：",
+                StringComparison.Ordinal), ex);
+        }
+
         ExtractZip(zipPath, stagingDir);
 
         if (!File.Exists(Path.Combine(stagingDir, "PalWorldService.exe")))

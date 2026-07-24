@@ -27,6 +27,7 @@
       <p class="meta" style="margin-bottom: var(--space-3)">
         当前版本 <strong class="mono">{{ toolVersion || '…' }}</strong>。
         可检查 GitHub Release；有更新时可一键下载并自动重启（保留 config/servers.yaml）。
+        若提示无法连接 GitHub，请在 servers.yaml 配置 <code>githubProxy</code>。
       </p>
       <div class="btn-row">
         <button class="btn" :disabled="checkingTool || applying" @click="checkToolUpdate">

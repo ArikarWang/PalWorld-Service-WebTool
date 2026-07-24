@@ -11,6 +11,13 @@ public class AppConfig
     public string GithubOwner { get; set; } = "ArikarWang";
     public string GithubRepo { get; set; } = "PalWorld-Service-WebTool";
 
+    /// <summary>
+    /// 可选。访问 GitHub 的代理前缀（国内网络直连 github.com 超时时配置）。
+    /// 例：https://ghproxy.net/ 或 https://mirror.ghproxy.com/
+    /// 最终请求形如：{githubProxy}https://api.github.com/...
+    /// </summary>
+    public string? GithubProxy { get; set; }
+
     public List<ServerConfig> Servers { get; set; } = [];
 }
 
