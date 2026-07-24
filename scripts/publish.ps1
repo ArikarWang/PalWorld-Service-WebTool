@@ -17,7 +17,7 @@ try {
     Pop-Location
 
     Write-Host ">>> Publishing Host (win-x64 self-contained)..." -ForegroundColor Cyan
-    $verNum = "1.0.3"
+    $verNum = "1.0.4"
     try {
         $tag = (git describe --tags --abbrev=0 2>$null)
         if ($tag) { $verNum = ($tag -replace '^v','') }
