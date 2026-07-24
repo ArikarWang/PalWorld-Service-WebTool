@@ -28,5 +28,11 @@ public class ServerConfig
     public string? LogDirectory { get; set; }
     public string? SaveDirectory { get; set; }
 
+    /// <summary>可选。SteamCMD 可执行文件路径；留空则尝试从 executablePath 推导。</summary>
+    public string? SteamCmdPath { get; set; }
+
+    /// <summary>可选。Steam AppId，帕鲁专用服默认 2394010。</summary>
+    public int? SteamAppId { get; set; }
+
     public string RestApiBaseUrl => $"http://{Host}:{RestApiPort}/v1/api";
 }

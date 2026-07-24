@@ -58,6 +58,17 @@ export const api = {
   process: (id: string) => request<{ running: boolean }>(`/servers/${id}/process`),
   processStart: (id: string) => request(`/servers/${id}/process/start`, { method: 'POST' }),
   processStop: (id: string) => request(`/servers/${id}/process/stop`, { method: 'POST' }),
+  checkUpdate: (id: string) =>
+    request<{
+      checked: boolean
+      updateAvailable: boolean
+      localBuildId?: string | null
+      remoteBuildId?: string | null
+      appId: number
+      remoteSource?: string | null
+      message?: string | null
+      checkedAtUtc: string
+    }>(`/servers/${id}/update/check`, { method: 'POST' }),
   backups: (id: string) => request<any[]>(`/servers/${id}/backups`),
   createBackup: (id: string) => request(`/servers/${id}/backups`, { method: 'POST' }),
   restoreBackup: (id: string, fileName: string) =>
