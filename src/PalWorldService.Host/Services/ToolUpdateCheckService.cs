@@ -29,7 +29,6 @@ public class ToolUpdateCheckService
         var info = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         if (!string.IsNullOrWhiteSpace(info))
         {
-            // Strip possible "+gitsha" suffix from some SDK builds
             var plus = info.IndexOf('+');
             return plus > 0 ? info[..plus] : info;
         }
@@ -61,16 +60,7 @@ public class ToolUpdateCheckService
             {
                 var body = await response.Content.ReadAsStringAsync(ct);
                 _logger.LogWarning("GitHub release check failed: {Status} {Body}", (int)response.StatusCode, body);
-                return new ToolUpdateCheckResult(
-                    Checked: false,
-                    UpdateAvailable: false,
-                    CurrentVersion: current,
-                    LatestVersion: null,
-                    ReleaseName: null,
-                    ReleaseUrl: null,
-                    PublishedAtUtc: null,
-                    Message: $"无法获取 GitHub Release（HTTP {(int)response.StatusCode}）。",
-                    CheckedAtUtc: DateTime.UtcNow);
+                return Fail(current, $"无法获取 GitHub Release（HTTP {(int)response.StatusCode}）。");
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
@@ -88,6 +78,24 @@ public class ToolUpdateCheckService
                 published = DateTime.SpecifyKind(pubDt.ToUniversalTime(), DateTimeKind.Utc);
             }
 
+            string? downloadUrl = null;
+            string? assetName = null;
+            long? assetSize = null;
+            if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var asset in assets.EnumerateArray())
+                {
+                    var an = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
+                    if (!string.Equals(an, ToolSelfUpdateService.ReleaseAssetName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    assetName = an;
+                    downloadUrl = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
+                    if (asset.TryGetProperty("size", out var sz) && sz.TryGetInt64(out var size))
+                        assetSize = size;
+                    break;
+                }
+            }
+
             var latest = NormalizeVersion(tag ?? "");
             if (string.IsNullOrWhiteSpace(latest))
             {
@@ -98,13 +106,23 @@ public class ToolUpdateCheckService
                     LatestVersion: null,
                     ReleaseName: name,
                     ReleaseUrl: htmlUrl,
+                    DownloadUrl: downloadUrl,
+                    AssetName: assetName,
+                    AssetSizeBytes: assetSize,
                     PublishedAtUtc: published,
                     Message: "最新 Release 缺少有效版本号。",
                     CheckedAtUtc: DateTime.UtcNow);
             }
 
-            var cmp = CompareSemVer(latest, current);
-            var updateAvailable = cmp > 0;
+            var updateAvailable = CompareSemVer(latest, current) > 0;
+            string message;
+            if (!updateAvailable)
+                message = $"管理工具已是最新版本（{current}）。";
+            else if (string.IsNullOrWhiteSpace(downloadUrl))
+                message = $"管理工具有新版本：{latest}（当前 {current}），但未找到 {ToolSelfUpdateService.ReleaseAssetName}，请手动下载。";
+            else
+                message = $"管理工具有新版本：{latest}（当前 {current}），可在线更新。";
+
             return new ToolUpdateCheckResult(
                 Checked: true,
                 UpdateAvailable: updateAvailable,
@@ -112,27 +130,33 @@ public class ToolUpdateCheckService
                 LatestVersion: latest,
                 ReleaseName: name,
                 ReleaseUrl: htmlUrl,
+                DownloadUrl: downloadUrl,
+                AssetName: assetName,
+                AssetSizeBytes: assetSize,
                 PublishedAtUtc: published,
-                Message: updateAvailable
-                    ? $"管理工具有新版本：{latest}（当前 {current}）。"
-                    : $"管理工具已是最新版本（{current}）。",
+                Message: message,
                 CheckedAtUtc: DateTime.UtcNow);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Tool update check failed");
-            return new ToolUpdateCheckResult(
-                Checked: false,
-                UpdateAvailable: false,
-                CurrentVersion: current,
-                LatestVersion: null,
-                ReleaseName: null,
-                ReleaseUrl: null,
-                PublishedAtUtc: null,
-                Message: $"检查管理工具更新失败：{ex.Message}",
-                CheckedAtUtc: DateTime.UtcNow);
+            return Fail(current, $"检查管理工具更新失败：{ex.Message}");
         }
     }
+
+    private static ToolUpdateCheckResult Fail(string current, string message) => new(
+        Checked: false,
+        UpdateAvailable: false,
+        CurrentVersion: current,
+        LatestVersion: null,
+        ReleaseName: null,
+        ReleaseUrl: null,
+        DownloadUrl: null,
+        AssetName: null,
+        AssetSizeBytes: null,
+        PublishedAtUtc: null,
+        Message: message,
+        CheckedAtUtc: DateTime.UtcNow);
 
     internal static string NormalizeVersion(string raw)
     {
@@ -140,7 +164,6 @@ public class ToolUpdateCheckService
         var v = raw.Trim();
         if (v.StartsWith("v", StringComparison.OrdinalIgnoreCase))
             v = v[1..];
-        // keep major.minor.patch(+prerelease) only
         var m = Regex.Match(v, @"^\d+(?:\.\d+){0,3}(?:-[0-9A-Za-z.-]+)?");
         return m.Success ? m.Value : v;
     }
@@ -167,7 +190,6 @@ public class ToolUpdateCheckService
             if (c != 0) return c;
         }
 
-        // release > prerelease
         if (string.IsNullOrEmpty(ap) && !string.IsNullOrEmpty(bp)) return 1;
         if (!string.IsNullOrEmpty(ap) && string.IsNullOrEmpty(bp)) return -1;
         return string.CompareOrdinal(ap, bp);
@@ -181,6 +203,9 @@ public record ToolUpdateCheckResult(
     string? LatestVersion,
     string? ReleaseName,
     string? ReleaseUrl,
+    string? DownloadUrl,
+    string? AssetName,
+    long? AssetSizeBytes,
     DateTime? PublishedAtUtc,
     string? Message,
     DateTime CheckedAtUtc);

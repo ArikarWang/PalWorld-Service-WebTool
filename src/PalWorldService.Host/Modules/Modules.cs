@@ -383,6 +383,21 @@ public static class SystemModule
         app.MapPost("/api/system/update/check", async (ToolUpdateCheckService updates, CancellationToken ct) =>
             Results.Ok(await updates.CheckAsync(ct)));
 
+        app.MapPost("/api/system/update/apply", async (
+            ToolSelfUpdateService selfUpdate,
+            IHostApplicationLifetime lifetime,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                return Results.Ok(await selfUpdate.ApplyAsync(lifetime, ct));
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
         app.MapPost("/api/system/shutdown", (IHostApplicationLifetime lifetime, ILoggerFactory logs) =>
         {
             logs.CreateLogger("System").LogWarning("Shutdown requested from web UI");

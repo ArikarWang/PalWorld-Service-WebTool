@@ -89,10 +89,20 @@ export const api = {
       latestVersion?: string | null
       releaseName?: string | null
       releaseUrl?: string | null
+      downloadUrl?: string | null
+      assetName?: string | null
+      assetSizeBytes?: number | null
       publishedAtUtc?: string | null
       message?: string | null
       checkedAtUtc: string
     }>('/system/update/check', { method: 'POST' }),
+  applyToolUpdate: () =>
+    request<{
+      ok: boolean
+      targetVersion?: string | null
+      message?: string | null
+      logPath?: string | null
+    }>('/system/update/apply', { method: 'POST' }),
 }
 
 export function rememberedPasswordKey(serverId: string) {
