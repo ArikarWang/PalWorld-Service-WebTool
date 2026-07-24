@@ -11,10 +11,12 @@
         <input v-model="remember" type="checkbox" />
         记住密码
       </label>
-      <button class="btn primary" type="submit" :disabled="loading" style="width:100%">登录</button>
+      <div class="btn-row" style="margin-top: var(--space-2)">
+        <button class="btn primary" type="submit" :disabled="loading" style="width:100%">登录</button>
+      </div>
       <p v-if="error" class="error">{{ error }}</p>
     </form>
-    <p style="margin-top:1rem"><router-link to="/">← 返回列表</router-link></p>
+    <p class="meta" style="margin-top: var(--space-4)"><router-link to="/">← 返回列表</router-link></p>
   </div>
 </template>
 

@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="toolbar">
-      <h1>仪表盘</h1>
+      <h1>总览</h1>
       <button class="btn" @click="load">刷新</button>
     </div>
     <div v-if="snap" class="panel">

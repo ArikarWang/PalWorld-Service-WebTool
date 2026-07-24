@@ -5,17 +5,19 @@
       <button class="btn primary" @click="create">创建备份</button>
       <button class="btn" @click="load">刷新</button>
     </div>
-    <table class="table">
-      <thead><tr><th>文件</th><th>大小</th><th>时间</th><th>操作</th></tr></thead>
-      <tbody>
-        <tr v-for="b in backups" :key="b.fileName">
-          <td>{{ b.fileName }}</td>
-          <td>{{ formatSize(b.sizeBytes) }}</td>
-          <td>{{ formatDate(b.createdAtUtc) }}</td>
-          <td><button class="btn sm" @click="restore(b.fileName)">恢复</button></td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>文件</th><th>大小</th><th>时间</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr v-for="b in backups" :key="b.fileName">
+            <td>{{ b.fileName }}</td>
+            <td>{{ formatSize(b.sizeBytes) }}</td>
+            <td>{{ formatDate(b.createdAtUtc) }}</td>
+            <td><button class="btn sm" @click="restore(b.fileName)">恢复</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <p v-if="!backups.length" class="empty">暂无备份</p>
   </div>
 </template>
