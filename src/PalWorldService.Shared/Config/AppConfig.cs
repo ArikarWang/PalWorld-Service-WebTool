@@ -6,6 +6,11 @@ public class AppConfig
     public string DataDirectory { get; set; } = "data";
     public string BackupDirectory { get; set; } = "backups";
     public int MonitorIntervalSeconds { get; set; } = 30;
+
+    /// <summary>用于检查管理工具自身更新的 GitHub 仓库。</summary>
+    public string GithubOwner { get; set; } = "ArikarWang";
+    public string GithubRepo { get; set; } = "PalWorld-Service-WebTool";
+
     public List<ServerConfig> Servers { get; set; } = [];
 }
 

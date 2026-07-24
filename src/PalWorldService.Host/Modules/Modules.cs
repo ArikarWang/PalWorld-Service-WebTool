@@ -369,6 +369,20 @@ public static class SystemModule
     {
         app.MapGet("/api/health", () => Results.Ok(new { status = "ok", time = DateTime.UtcNow }));
 
+        app.MapGet("/api/system/version", () =>
+        {
+            var version = ToolUpdateCheckService.GetCurrentVersion();
+            return Results.Ok(new
+            {
+                name = "PalWorld Service",
+                version,
+                checkedAtUtc = DateTime.UtcNow
+            });
+        });
+
+        app.MapPost("/api/system/update/check", async (ToolUpdateCheckService updates, CancellationToken ct) =>
+            Results.Ok(await updates.CheckAsync(ct)));
+
         app.MapPost("/api/system/shutdown", (IHostApplicationLifetime lifetime, ILoggerFactory logs) =>
         {
             logs.CreateLogger("System").LogWarning("Shutdown requested from web UI");

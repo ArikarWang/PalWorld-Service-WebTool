@@ -58,10 +58,15 @@ jobs:
         run: |
           $out = "artifacts/PalWorldService"
           New-Item -ItemType Directory -Path $out -Force | Out-Null
+          $v = "${{ steps.ver.outputs.version }}"
+          $verNum = $v -replace '^v',''
+          Write-Host "Embedding version: $verNum"
           dotnet publish "src/PalWorldService.Host/PalWorldService.Host.csproj" `
             -c Release `
             -r win-x64 `
             --self-contained true `
+            -p:Version=$verNum `
+            -p:InformationalVersion=$verNum `
             -o $out
           New-Item -ItemType Directory -Path "$out/config" -Force | Out-Null
           Copy-Item "config/servers.yaml" "$out/config/servers.yaml" -Force

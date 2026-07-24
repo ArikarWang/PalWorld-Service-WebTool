@@ -98,6 +98,16 @@ code, .mono {
   font-weight: 650;
   font-size: 1.05rem;
   letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.brand-ver {
+  font-weight: 500;
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0;
 }
 
 .bar-actions {

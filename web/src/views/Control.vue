@@ -45,13 +45,13 @@
     </div>
 
     <div class="panel">
-      <h3>检查更新</h3>
+      <h3>帕鲁游戏服务器更新</h3>
       <p class="meta" style="margin-bottom: var(--space-3)">
         对比本机 Steam 安装清单与远端 public 分支 buildid（默认 AppId 2394010）。仅检查，不会自动更新。
       </p>
       <div class="btn-row">
         <button class="btn" :disabled="busy || checkingUpdate" @click="checkUpdate">
-          {{ checkingUpdate ? '检查中…' : '检查帕鲁服务更新' }}
+          {{ checkingUpdate ? '检查中…' : '检查游戏服更新' }}
         </button>
       </div>
       <div v-if="updateResult" class="update-result">

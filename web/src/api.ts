@@ -79,6 +79,20 @@ export const api = {
   deleteSchedule: (id: string, taskId: string) =>
     request(`/servers/${id}/schedules/${taskId}`, { method: 'DELETE' }),
   shutdownService: () => request('/system/shutdown', { method: 'POST' }),
+  systemVersion: () =>
+    request<{ name: string; version: string; checkedAtUtc: string }>('/system/version'),
+  checkToolUpdate: () =>
+    request<{
+      checked: boolean
+      updateAvailable: boolean
+      currentVersion: string
+      latestVersion?: string | null
+      releaseName?: string | null
+      releaseUrl?: string | null
+      publishedAtUtc?: string | null
+      message?: string | null
+      checkedAtUtc: string
+    }>('/system/update/check', { method: 'POST' }),
 }
 
 export function rememberedPasswordKey(serverId: string) {
