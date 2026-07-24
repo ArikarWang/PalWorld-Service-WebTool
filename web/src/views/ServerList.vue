@@ -25,11 +25,20 @@
     <div class="panel tool-update">
       <h3>管理工具更新</h3>
       <p class="meta" style="margin-bottom: var(--space-3)">
-        当前版本 <strong class="mono">{{ toolVersion || '…' }}</strong>。对比 GitHub Release，仅检查不会自动升级。
+        当前版本 <strong class="mono">{{ toolVersion || '…' }}</strong>。
+        可检查 GitHub Release；有更新时可一键下载并自动重启（保留 config/servers.yaml）。
       </p>
       <div class="btn-row">
-        <button class="btn" :disabled="checkingTool" @click="checkToolUpdate">
+        <button class="btn" :disabled="checkingTool || applying" @click="checkToolUpdate">
           {{ checkingTool ? '检查中…' : '检查工具更新' }}
+        </button>
+        <button
+          v-if="canApply"
+          class="btn primary"
+          :disabled="checkingTool || applying"
+          @click="applyToolUpdate"
+        >
+          {{ applying ? '下载更新中…' : `下载并更新到 ${toolUpdate?.latestVersion}` }}
         </button>
         <a
           v-if="toolUpdate?.releaseUrl"
@@ -52,6 +61,10 @@
           <span>最新版本</span>
           <strong class="mono">{{ toolUpdate.latestVersion || '-' }}</strong>
         </div>
+        <div v-if="toolUpdate.assetName" class="stat-row">
+          <span>安装包</span>
+          <strong class="mono">{{ toolUpdate.assetName }}{{ assetSizeLabel }}</strong>
+        </div>
         <p class="meta" style="margin-top: var(--space-2)">{{ toolUpdate.message }}</p>
       </div>
     </div>
@@ -70,6 +83,7 @@ const loading = ref(false)
 const error = ref('')
 const toolVersion = ref('')
 const checkingTool = ref(false)
+const applying = ref(false)
 const toolUpdate = ref<Awaited<ReturnType<typeof api.checkToolUpdate>> | null>(null)
 
 const toolStatusText = computed(() => {
@@ -83,6 +97,18 @@ const toolStatusClass = computed(() => {
   const r = toolUpdate.value
   if (!r?.checked) return 'warn-text'
   return r.updateAvailable ? 'warn-text' : 'ok-text'
+})
+
+const canApply = computed(() => {
+  const r = toolUpdate.value
+  return !!(r?.checked && r.updateAvailable && r.downloadUrl)
+})
+
+const assetSizeLabel = computed(() => {
+  const n = toolUpdate.value?.assetSizeBytes
+  if (n == null || n <= 0) return ''
+  if (n < 1024 * 1024) return `（${(n / 1024).toFixed(0)} KB）`
+  return `（${(n / 1024 / 1024).toFixed(1)} MB）`
 })
 
 async function load() {
@@ -120,6 +146,24 @@ async function checkToolUpdate() {
     toast(e.message, 'error')
   } finally {
     checkingTool.value = false
+  }
+}
+
+async function applyToolUpdate() {
+  if (!canApply.value) return
+  const ver = toolUpdate.value?.latestVersion || ''
+  if (!confirm(
+    `确定下载并更新到 ${ver}？\n\n管理服务将退出并自动重启。\nconfig/servers.yaml、data、backups、logs 会保留。`
+  )) return
+
+  applying.value = true
+  try {
+    const res = await api.applyToolUpdate()
+    toast(res.message || '正在更新…')
+    setTimeout(() => router.replace({ name: 'offline' }), 600)
+  } catch (e: any) {
+    toast(e.message, 'error')
+    applying.value = false
   }
 }
 
