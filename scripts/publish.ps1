@@ -17,6 +17,12 @@ try {
     Pop-Location
 
     Write-Host ">>> Publishing Host (win-x64 self-contained)..." -ForegroundColor Cyan
+    $verNum = "1.0.3"
+    try {
+        $tag = (git describe --tags --abbrev=0 2>$null)
+        if ($tag) { $verNum = ($tag -replace '^v','') }
+    } catch { }
+
     if (Test-Path $OutputDir) {
         # Keep user config if present
         $keepConfig = Join-Path $OutputDir "config\servers.yaml"
@@ -29,10 +35,13 @@ try {
         New-Item -ItemType Directory -Path $OutputDir | Out-Null
     }
 
+    Write-Host "Embedding version: $verNum" -ForegroundColor DarkGray
     dotnet publish "src\PalWorldService.Host\PalWorldService.Host.csproj" `
         -c $Configuration `
         -r win-x64 `
         --self-contained true `
+        -p:Version=$verNum `
+        -p:InformationalVersion=$verNum `
         -o $OutputDir
 
     New-Item -ItemType Directory -Path (Join-Path $OutputDir "config") -Force | Out-Null
