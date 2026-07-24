@@ -58,6 +58,17 @@ export const api = {
   process: (id: string) => request<{ running: boolean }>(`/servers/${id}/process`),
   processStart: (id: string) => request(`/servers/${id}/process/start`, { method: 'POST' }),
   processStop: (id: string) => request(`/servers/${id}/process/stop`, { method: 'POST' }),
+  checkUpdate: (id: string) =>
+    request<{
+      checked: boolean
+      updateAvailable: boolean
+      localBuildId?: string | null
+      remoteBuildId?: string | null
+      appId: number
+      remoteSource?: string | null
+      message?: string | null
+      checkedAtUtc: string
+    }>(`/servers/${id}/update/check`, { method: 'POST' }),
   backups: (id: string) => request<any[]>(`/servers/${id}/backups`),
   createBackup: (id: string) => request(`/servers/${id}/backups`, { method: 'POST' }),
   restoreBackup: (id: string, fileName: string) =>
@@ -68,6 +79,20 @@ export const api = {
   deleteSchedule: (id: string, taskId: string) =>
     request(`/servers/${id}/schedules/${taskId}`, { method: 'DELETE' }),
   shutdownService: () => request('/system/shutdown', { method: 'POST' }),
+  systemVersion: () =>
+    request<{ name: string; version: string; checkedAtUtc: string }>('/system/version'),
+  checkToolUpdate: () =>
+    request<{
+      checked: boolean
+      updateAvailable: boolean
+      currentVersion: string
+      latestVersion?: string | null
+      releaseName?: string | null
+      releaseUrl?: string | null
+      publishedAtUtc?: string | null
+      message?: string | null
+      checkedAtUtc: string
+    }>('/system/update/check', { method: 'POST' }),
 }
 
 export function rememberedPasswordKey(serverId: string) {

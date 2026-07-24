@@ -2,6 +2,9 @@
 dataDirectory: "data"
 backupDirectory: "backups"
 monitorIntervalSeconds: 30
+# 管理工具更新检查（GitHub Releases），一般无需修改
+# githubOwner: ArikarWang
+# githubRepo: PalWorld-Service-WebTool
 
 servers:
   - id: main
@@ -17,3 +20,6 @@ servers:
     configPath: "C:/gameserver/steamcmd/steamapps/common/PalServer/Pal/Saved/Config/WindowsServer/PalWorldSettings.ini"
     logDirectory: "C:/gameserver/steamcmd/steamapps/common/PalServer/Pal/Saved/Logs"
     saveDirectory: "C:/gameserver/steamcmd/steamapps/common/PalServer/Pal/Saved/SaveGames"
+    # 可选：SteamCMD 路径与 AppId（用于检查更新）。通常可从 executablePath 自动推导。
+    # steamCmdPath: "C:/gameserver/steamcmd/steamcmd.exe"
+    # steamAppId: 2394010

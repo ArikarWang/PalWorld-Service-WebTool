@@ -6,6 +6,11 @@ public class AppConfig
     public string DataDirectory { get; set; } = "data";
     public string BackupDirectory { get; set; } = "backups";
     public int MonitorIntervalSeconds { get; set; } = 30;
+
+    /// <summary>用于检查管理工具自身更新的 GitHub 仓库。</summary>
+    public string GithubOwner { get; set; } = "ArikarWang";
+    public string GithubRepo { get; set; } = "PalWorld-Service-WebTool";
+
     public List<ServerConfig> Servers { get; set; } = [];
 }
 
@@ -27,6 +32,12 @@ public class ServerConfig
     public string? ConfigPath { get; set; }
     public string? LogDirectory { get; set; }
     public string? SaveDirectory { get; set; }
+
+    /// <summary>可选。SteamCMD 可执行文件路径；留空则尝试从 executablePath 推导。</summary>
+    public string? SteamCmdPath { get; set; }
+
+    /// <summary>可选。Steam AppId，帕鲁专用服默认 2394010。</summary>
+    public int? SteamAppId { get; set; }
 
     public string RestApiBaseUrl => $"http://{Host}:{RestApiPort}/v1/api";
 }

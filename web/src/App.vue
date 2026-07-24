@@ -1,7 +1,10 @@
 <template>
   <div class="app-shell">
     <header v-if="!isOffline" class="global-bar">
-      <router-link to="/" class="brand">PalWorld Service</router-link>
+      <router-link to="/" class="brand">
+        PalWorld Service
+        <small v-if="appVersion" class="brand-ver">v{{ appVersion }}</small>
+      </router-link>
       <div class="bar-actions">
         <button
           class="theme-toggle"
@@ -15,7 +18,10 @@
       </div>
     </header>
     <header v-else class="global-bar">
-      <span class="brand">PalWorld Service</span>
+      <span class="brand">
+        PalWorld Service
+        <small v-if="appVersion" class="brand-ver">v{{ appVersion }}</small>
+      </span>
       <div class="bar-actions">
         <button
           class="theme-toggle"
@@ -42,6 +48,7 @@ import { theme, toggleTheme } from './theme'
 const route = useRoute()
 const router = useRouter()
 const toast = ref<{ message: string; type: string } | null>(null)
+const appVersion = ref('')
 const isOffline = computed(() => route.name === 'offline')
 let healthTimer: number | undefined
 
@@ -63,6 +70,14 @@ async function checkHealth() {
   }
 }
 
+async function loadVersion() {
+  try {
+    appVersion.value = (await api.systemVersion()).version
+  } catch {
+    /* ignore while offline */
+  }
+}
+
 async function shutdown() {
   if (!confirm('确定关闭管理服务？控制台窗口将自动关闭。')) return
   try {
@@ -76,6 +91,7 @@ async function shutdown() {
 
 onMounted(() => {
   checkHealth()
+  void loadVersion()
   healthTimer = window.setInterval(checkHealth, 4000)
 })
 

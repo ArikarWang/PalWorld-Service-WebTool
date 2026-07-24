@@ -298,6 +298,20 @@ public static class ServerOpsModule
             return Results.Ok(new { ok = true });
         });
 
+        g.MapPost("/update/check", async (string serverId, AppConfigProvider config, UpdateCheckService updates, CancellationToken ct) =>
+        {
+            var s = config.GetServer(serverId);
+            if (s is null) return Results.NotFound();
+            try
+            {
+                return Results.Ok(await updates.CheckAsync(s, ct));
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
         g.MapGet("/backups", (string serverId, AppConfigProvider config, LocalOpsService local) =>
         {
             var s = config.GetServer(serverId);
@@ -354,6 +368,20 @@ public static class SystemModule
     public static void MapSystemModule(this WebApplication app)
     {
         app.MapGet("/api/health", () => Results.Ok(new { status = "ok", time = DateTime.UtcNow }));
+
+        app.MapGet("/api/system/version", () =>
+        {
+            var version = ToolUpdateCheckService.GetCurrentVersion();
+            return Results.Ok(new
+            {
+                name = "PalWorld Service",
+                version,
+                checkedAtUtc = DateTime.UtcNow
+            });
+        });
+
+        app.MapPost("/api/system/update/check", async (ToolUpdateCheckService updates, CancellationToken ct) =>
+            Results.Ok(await updates.CheckAsync(ct)));
 
         app.MapPost("/api/system/shutdown", (IHostApplicationLifetime lifetime, ILoggerFactory logs) =>
         {
