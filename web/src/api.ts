@@ -44,6 +44,8 @@ export const api = {
   save: (id: string) => request(`/servers/${id}/save`, { method: 'POST' }),
   shutdown: (id: string, waitTime = 60, message?: string) =>
     request(`/servers/${id}/shutdown`, { method: 'POST', body: JSON.stringify({ waitTime, message }) }),
+  shutdownPreset: (id: string, seconds: 10 | 30 | 60 | number) =>
+    request(`/servers/${id}/shutdown-preset`, { method: 'POST', body: JSON.stringify({ seconds }) }),
   stop: (id: string) => request(`/servers/${id}/stop`, { method: 'POST' }),
   kick: (id: string, userId: string, message?: string) =>
     request(`/servers/${id}/kick`, { method: 'POST', body: JSON.stringify({ userId, message }) }),

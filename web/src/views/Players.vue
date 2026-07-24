@@ -5,45 +5,49 @@
       <button class="btn" @click="load">刷新</button>
     </div>
     <p class="hint">在线来自 REST API；离线来自存档目录 Players/*.sav 合并。点击行查看帕鲁（能力评估中）。</p>
-    <table class="table">
-      <thead>
-        <tr>
-          <th>状态</th><th>名称</th><th>ID</th><th>IP</th><th>Ping</th><th>等级</th><th>操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="p in players"
-          :key="p.key"
-          class="click-row"
-          @click="openPals(p)"
-        >
-          <td>
-            <span class="badge" :class="p.isOnline ? 'online' : 'offline'">
-              {{ p.isOnline ? '在线' : '离线' }}
-            </span>
-          </td>
-          <td>{{ p.name || '(存档玩家)' }}</td>
-          <td><code>{{ p.userId || p.playerUid || p.key }}</code></td>
-          <td>{{ p.ip || '-' }}</td>
-          <td>{{ p.isOnline ? p.ping : '-' }}</td>
-          <td>{{ p.level || '-' }}</td>
-          <td @click.stop>
-            <button class="btn sm" @click="openPals(p)">帕鲁</button>
-            <button
-              v-if="p.isOnline && p.userId"
-              class="btn sm danger"
-              @click="kick(p.userId)"
-            >踢出</button>
-            <button
-              v-if="p.isOnline && p.userId"
-              class="btn sm danger"
-              @click="ban(p.userId)"
-            >封禁</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>状态</th><th>名称</th><th>ID</th><th>IP</th><th>Ping</th><th>等级</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="p in players"
+            :key="p.key"
+            class="click-row"
+            @click="openPals(p)"
+          >
+            <td>
+              <span class="badge" :class="p.isOnline ? 'online' : 'offline'">
+                {{ p.isOnline ? '在线' : '离线' }}
+              </span>
+            </td>
+            <td>{{ p.name || '(存档玩家)' }}</td>
+            <td><code>{{ p.userId || p.playerUid || p.key }}</code></td>
+            <td>{{ p.ip || '-' }}</td>
+            <td>{{ p.isOnline ? p.ping : '-' }}</td>
+            <td>{{ p.level || '-' }}</td>
+            <td @click.stop>
+              <div class="actions">
+                <button class="btn sm" @click="openPals(p)">帕鲁</button>
+                <button
+                  v-if="p.isOnline && p.userId"
+                  class="btn sm danger"
+                  @click="kick(p.userId)"
+                >踢出</button>
+                <button
+                  v-if="p.isOnline && p.userId"
+                  class="btn sm danger"
+                  @click="ban(p.userId)"
+                >封禁</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <p v-if="!players.length" class="empty">暂无玩家（无在线且未扫描到存档）</p>
   </div>
 </template>
@@ -95,5 +99,5 @@ onMounted(load)
 
 <style scoped>
 .click-row { cursor: pointer; }
-.click-row:hover td { background: rgba(59, 130, 246, 0.08); }
+.click-row:hover td { background: var(--primary-soft); }
 </style>

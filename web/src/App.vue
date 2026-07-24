@@ -2,11 +2,31 @@
   <div class="app-shell">
     <header v-if="!isOffline" class="global-bar">
       <router-link to="/" class="brand">PalWorld Service</router-link>
-      <button class="btn danger sm" @click="shutdown">关闭管理服务</button>
+      <div class="bar-actions">
+        <button
+          class="theme-toggle"
+          type="button"
+          :title="theme === 'light' ? '切换深色主题' : '切换浅色主题'"
+          @click="toggleTheme"
+        >
+          {{ theme === 'light' ? '◐' : '◑' }}
+        </button>
+        <button class="btn danger sm" @click="shutdown">关闭管理服务</button>
+      </div>
     </header>
     <header v-else class="global-bar">
       <span class="brand">PalWorld Service</span>
-      <span class="meta">服务已停止</span>
+      <div class="bar-actions">
+        <button
+          class="theme-toggle"
+          type="button"
+          :title="theme === 'light' ? '切换深色主题' : '切换浅色主题'"
+          @click="toggleTheme"
+        >
+          {{ theme === 'light' ? '◐' : '◑' }}
+        </button>
+        <span class="meta">服务已停止</span>
+      </div>
     </header>
     <router-view />
     <div v-if="toast" class="toast" :class="toast.type">{{ toast.message }}</div>
@@ -17,6 +37,7 @@
 import { computed, onMounted, onUnmounted, provide, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from './api'
+import { theme, toggleTheme } from './theme'
 
 const route = useRoute()
 const router = useRouter()
@@ -48,8 +69,7 @@ async function shutdown() {
     await api.shutdownService()
     showToast('正在关闭服务…')
     setTimeout(() => router.replace({ name: 'offline' }), 400)
-  } catch (e: any) {
-    // Service may already be dying
+  } catch {
     router.replace({ name: 'offline' })
   }
 }

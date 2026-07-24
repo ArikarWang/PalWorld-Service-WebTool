@@ -184,6 +184,36 @@ public static class ServerOpsModule
             return Results.Ok(new { ok = true });
         });
 
+        // Presets: 10s / 30s / 60s — announce x3, save, then shutdown with wait time.
+        g.MapPost("/shutdown-preset", async (string serverId, ShutdownPresetBody body, AppConfigProvider config, IPalworldRestClient client, CancellationToken ct) =>
+        {
+            var s = config.GetServer(serverId);
+            if (s is null) return Results.NotFound();
+
+            var seconds = body.Seconds;
+            if (seconds is not (10 or 30 or 60))
+                return Results.BadRequest(new { error = "仅支持 10、30、60 秒预设" });
+
+            var label = seconds switch
+            {
+                10 => "10秒",
+                30 => "30秒",
+                _ => "1分钟"
+            };
+            var message = $"服务器将于{label}后关闭，请各位玩家做好准备";
+
+            for (var i = 0; i < 3; i++)
+            {
+                await client.AnnounceAsync(s, message, ct);
+                if (i < 2)
+                    await Task.Delay(800, ct);
+            }
+
+            await client.SaveAsync(s, ct);
+            await client.ShutdownAsync(s, seconds, message, ct);
+            return Results.Ok(new { ok = true, seconds, message });
+        });
+
         g.MapPost("/stop", async (string serverId, AppConfigProvider config, IPalworldRestClient client, CancellationToken ct) =>
         {
             var s = config.GetServer(serverId);
@@ -293,6 +323,7 @@ public static class ServerOpsModule
 
     public record MessageBody(string? Message);
     public record ShutdownBody(int WaitTime, string? Message);
+    public record ShutdownPresetBody(int Seconds);
     public record UserActionBody(string UserId, string? Message);
     public record ConfigBody(string? Content);
 }
