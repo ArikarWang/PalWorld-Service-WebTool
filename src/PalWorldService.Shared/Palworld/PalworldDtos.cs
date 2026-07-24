@@ -65,6 +65,55 @@ public sealed class StringOrNumberJsonConverter : JsonConverter<string?>
     }
 }
 
+/// <summary>
+/// Palworld REST may return ints as float/double/string (e.g. ping).
+/// </summary>
+public sealed class FlexibleInt32JsonConverter : JsonConverter<int>
+{
+    public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.Null:
+                return 0;
+            case JsonTokenType.Number:
+                if (reader.TryGetInt32(out var i))
+                    return i;
+                if (reader.TryGetInt64(out var l))
+                    return ClampToInt32(l);
+                if (reader.TryGetDouble(out var d))
+                    return ClampToInt32((long)Math.Round(d));
+                break;
+            case JsonTokenType.String:
+                var s = reader.GetString();
+                if (string.IsNullOrWhiteSpace(s))
+                    return 0;
+                if (int.TryParse(s, out var parsed))
+                    return parsed;
+                if (double.TryParse(s, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsedD))
+                    return ClampToInt32((long)Math.Round(parsedD));
+                return 0;
+            default:
+                reader.Skip();
+                return 0;
+        }
+
+        reader.Skip();
+        return 0;
+    }
+
+    public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options)
+        => writer.WriteNumberValue(value);
+
+    private static int ClampToInt32(long value)
+    {
+        if (value > int.MaxValue) return int.MaxValue;
+        if (value < int.MinValue) return int.MinValue;
+        return (int)value;
+    }
+}
+
 public record PalPlayer
 {
     public string? Name { get; init; }
@@ -73,9 +122,16 @@ public record PalPlayer
     public string? PlayerUid { get; init; }
     public string? UserId { get; init; }
     public string? Ip { get; init; }
+
+    [JsonConverter(typeof(FlexibleInt32JsonConverter))]
     public int Ping { get; init; }
+
+    [JsonConverter(typeof(FlexibleInt32JsonConverter))]
     public int Level { get; init; }
+
+    [JsonConverter(typeof(FlexibleInt32JsonConverter))]
     public int BuildingCount { get; init; }
+
     public PalPlayerLocation? Location { get; init; }
 }
 
