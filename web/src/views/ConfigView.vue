@@ -6,8 +6,9 @@
       <button class="btn primary" :disabled="busy || !canSave" @click="save">保存</button>
     </div>
     <p class="hint">
-      编辑 PalWorldSettings.ini。下方为尽量完整的 OptionSettings 表单（含 1.0 常见项）；
-      文件里出现但未收录的键会显示在「文件中的额外项」。保存后通常需重启帕鲁服务器才会生效。
+      编辑 PalWorldSettings.ini。下方按 Palworld 1.0 专用服 OptionSettings 全量键（119 项）分组；
+      文件里多出的键会显示在「文件中的额外项」。斑马纹便于对照每一行（含复选框）。
+      保存后通常需重启帕鲁服务器才会生效。
     </p>
     <p v-if="parseError" class="error">{{ parseError }}</p>
     <p v-if="parsedOk" class="meta">
@@ -292,38 +293,60 @@ onMounted(load)
 }
 
 .form-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-3);
-}
-
-@media (min-width: 900px) {
-  .form-grid {
-    grid-template-columns: 1fr 1fr;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .field-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 280px);
+  align-items: center;
+  gap: 10px 16px;
+  margin: 0;
+  padding: 12px 14px;
   min-width: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.field-row:last-child {
+  border-bottom: none;
+}
+
+.field-row:nth-child(even) {
+  background: color-mix(in srgb, var(--surface2) 88%, var(--surface));
+}
+
+.field-row:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 
 .field-row.field-bool {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.field-row.field-bool .field-label {
-  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 28px;
 }
 
 .field-row.field-bool input[type='checkbox'] {
   width: 18px;
   height: 18px;
+  margin: 0;
+  justify-self: end;
   accent-color: var(--accent);
+}
+
+.field-row > input[type='text'],
+.field-row > input[type='number'],
+.field-row > select {
+  width: 100%;
+  min-width: 0;
+}
+
+.field-row .field-hint {
+  grid-column: 1 / -1;
+  margin-top: -4px;
 }
 
 .field-label {
@@ -333,18 +356,32 @@ onMounted(load)
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text);
+  min-width: 0;
 }
 
 .field-label small {
   font-weight: 500;
   font-size: 0.72rem;
   color: var(--muted);
+  word-break: break-all;
 }
 
 .field-hint {
   font-size: 0.78rem;
   color: var(--muted);
   line-height: 1.4;
+}
+
+@media (max-width: 700px) {
+  .field-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .field-row.field-bool {
+    grid-template-columns: minmax(0, 1fr) 28px;
+    align-items: center;
+  }
 }
 
 .code-box {
