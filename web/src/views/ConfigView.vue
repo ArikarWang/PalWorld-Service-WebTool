@@ -6,9 +6,14 @@
       <button class="btn primary" :disabled="busy || !canSave" @click="save">保存</button>
     </div>
     <p class="hint">
-      编辑 PalWorldSettings.ini。表单修改常用项；保存后通常需重启帕鲁服务器才会生效。
+      编辑 PalWorldSettings.ini。下方为尽量完整的 OptionSettings 表单（含 1.0 常见项）；
+      文件里出现但未收录的键会显示在「文件中的额外项」。保存后通常需重启帕鲁服务器才会生效。
     </p>
     <p v-if="parseError" class="error">{{ parseError }}</p>
+    <p v-if="parsedOk" class="meta">
+      已解析 {{ Object.keys(settings).length }} 项 · 表单收录 {{ knownCount }} 项
+      <span v-if="unknownFields.length"> · 额外 {{ unknownFields.length }} 项</span>
+    </p>
 
     <template v-if="parsedOk">
       <div
@@ -73,6 +78,48 @@
           </label>
         </div>
       </div>
+
+      <div v-if="unknownFields.length" class="panel">
+        <h3>文件中的额外项</h3>
+        <p class="meta" style="margin-bottom: var(--space-3)">
+          这些键存在于当前 ini，但尚未列入上方分组。仍可在此修改，保存时会一并写回。
+        </p>
+        <div class="form-grid">
+          <label
+            v-for="field in unknownFields"
+            :key="field.key"
+            class="field-row"
+            :class="{ 'field-bool': field.kind === 'bool' }"
+          >
+            <span class="field-label">
+              {{ field.label }}
+              <small class="mono">{{ field.key }}</small>
+            </span>
+
+            <input
+              v-if="field.kind === 'string'"
+              type="text"
+              :value="displayValue(field.key)"
+              @input="onTextInput(field.key, ($event.target as HTMLInputElement).value)"
+            />
+
+            <input
+              v-else-if="field.kind === 'number'"
+              type="number"
+              step="any"
+              :value="displayValue(field.key)"
+              @input="onNumberInput(field.key, ($event.target as HTMLInputElement).value)"
+            />
+
+            <input
+              v-else-if="field.kind === 'bool'"
+              type="checkbox"
+              :checked="boolValue(field.key)"
+              @change="onBoolInput(field.key, ($event.target as HTMLInputElement).checked)"
+            />
+          </label>
+        </div>
+      </div>
     </template>
 
     <div class="panel">
@@ -100,7 +147,12 @@
 import { computed, inject, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api'
-import { SETTING_SECTIONS } from '../palworld/settingsFields'
+import {
+  ALL_FORM_KEYS,
+  makeUnknownField,
+  SETTING_SECTIONS,
+  type SettingField,
+} from '../palworld/settingsFields'
 import {
   formatSettingValue,
   isTruthy,
@@ -120,72 +172,82 @@ const showRaw = ref(false)
 const rawContent = ref('')
 const parseError = ref('')
 const parsedOk = ref(false)
-/** Working OptionSettings map (raw tokens including quotes). */
 const settings = reactive<SettingsMap>({})
-const formTouched = ref(false)
+const formDirty = ref(false)
 
-const canSave = computed(() => rawContent.value.trim().length > 0)
+const knownCount = ALL_FORM_KEYS.size
+
+const unknownFields = computed<SettingField[]>(() => {
+  const keys = Object.keys(settings)
+    .filter((k) => !ALL_FORM_KEYS.has(k))
+    .sort((a, b) => a.localeCompare(b))
+  return keys.map((k) => makeUnknownField(k, unwrapValue(settings[k] ?? '')))
+})
+
+const canSave = computed(() => !!rawContent.value || formDirty.value)
+
+function clearSettings() {
+  for (const k of Object.keys(settings)) delete settings[k]
+}
+
+function applyParsed(content: string) {
+  const parsed = parsePalWorldSettings(content)
+  clearSettings()
+  Object.assign(settings, parsed.settings)
+  parsedOk.value = parsed.ok
+  parseError.value = parsed.error || ''
+  formDirty.value = false
+  if (!parsed.ok) showRaw.value = true
+}
 
 function displayValue(key: string): string {
-  return unwrapValue(settings[key] ?? '')
+  const raw = settings[key]
+  if (raw === undefined || raw === null) return ''
+  return unwrapValue(raw)
 }
 
 function boolValue(key: string): boolean {
-  return isTruthy(settings[key])
+  return isTruthy(settings[key] ?? 'False')
 }
 
-function applyParsed(text: string) {
-  const result = parsePalWorldSettings(text)
-  rawContent.value = text
-  parseError.value = result.error || ''
-  parsedOk.value = result.ok
-  Object.keys(settings).forEach(k => delete settings[k])
-  if (result.ok) {
-    Object.assign(settings, result.settings)
-  }
-  formTouched.value = false
+function setSetting(key: string, value: string) {
+  settings[key] = value
+  formDirty.value = true
 }
 
 function onTextInput(key: string, value: string) {
-  settings[key] = formatSettingValue(value, 'string')
-  formTouched.value = true
+  setSetting(key, value)
 }
 
 function onNumberInput(key: string, value: string) {
-  settings[key] = formatSettingValue(value === '' ? 0 : Number(value), 'number')
-  formTouched.value = true
+  if (value === '' || value === '-') {
+    delete settings[key]
+    formDirty.value = true
+    return
+  }
+  setSetting(key, value)
 }
 
 function onEnumInput(key: string, value: string) {
-  settings[key] = formatSettingValue(value, 'enum')
-  formTouched.value = true
+  setSetting(key, value)
 }
 
 function onBoolInput(key: string, checked: boolean) {
-  settings[key] = formatSettingValue(checked, 'bool')
-  formTouched.value = true
+  setSetting(key, checked ? 'True' : 'False')
 }
 
 function onRawEdited() {
-  // Re-parse when user edits raw text so form stays in sync if possible
-  const result = parsePalWorldSettings(rawContent.value)
-  parseError.value = result.error || ''
-  parsedOk.value = result.ok
-  if (result.ok) {
-    Object.keys(settings).forEach(k => delete settings[k])
-    Object.assign(settings, result.settings)
-    formTouched.value = false
-  }
+  applyParsed(rawContent.value)
 }
 
 async function load() {
   busy.value = true
   try {
     const res = await api.getConfig(id())
-    applyParsed(res.content || '')
-    toast('配置已加载')
+    rawContent.value = res.content || ''
+    applyParsed(rawContent.value)
   } catch (e: any) {
-    toast(e.message, 'error')
+    toast(e.message || String(e), 'error')
   } finally {
     busy.value = false
   }
@@ -194,101 +256,34 @@ async function load() {
 async function save() {
   busy.value = true
   try {
-    let toWrite = rawContent.value
+    let content = rawContent.value
     if (parsedOk.value) {
-      toWrite = rewriteOptionSettings(rawContent.value, { ...settings })
-      rawContent.value = toWrite
-      formTouched.value = false
+      const map: SettingsMap = {}
+      for (const [k, v] of Object.entries(settings)) {
+        map[k] = formatSettingValue(k, v)
+      }
+      content = rewriteOptionSettings(rawContent.value, map)
+      rawContent.value = content
     }
-    await api.putConfig(id(), toWrite)
-    applyParsed(toWrite)
-    toast('配置已保存')
+    await api.putConfig(id(), content)
+    applyParsed(content)
+    toast('配置已保存', 'success')
   } catch (e: any) {
-    toast(e.message, 'error')
+    toast(e.message || String(e), 'error')
   } finally {
     busy.value = false
   }
 }
 
-onMounted(async () => {
-  busy.value = true
-  try {
-    const res = await api.getConfig(id())
-    applyParsed(res.content || '')
-  } catch (e: any) {
-    toast(e.message, 'error')
-  } finally {
-    busy.value = false
-  }
-})
+onMounted(load)
 </script>
 
 <style scoped>
-.form-grid {
-  display: grid;
-  gap: var(--space-3);
-}
-
-.field-row {
-  display: grid;
-  gap: 0.4rem;
-  margin: 0;
-  color: var(--text);
-  font-size: 0.92rem;
-}
-
-.field-row.field-bool {
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.field-row.field-bool .field-hint {
-  grid-column: 1 / -1;
-}
-
-.field-label {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.5rem;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.field-label small {
-  opacity: 0.75;
-}
-
-.field-hint {
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-.field-row input[type="text"],
-.field-row input[type="number"],
-.field-row select {
-  width: 100%;
-  margin-top: 0;
-  padding: 0.65rem 0.85rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font: inherit;
-}
-
-.field-row input[type="checkbox"] {
-  width: 1.15rem;
-  height: 1.15rem;
-  accent-color: var(--primary);
-}
-
 .raw-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: var(--space-3);
   margin-bottom: var(--space-2);
 }
 
@@ -296,13 +291,68 @@ onMounted(async () => {
   margin: 0;
 }
 
-@media (min-width: 840px) {
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 900px) {
   .form-grid {
     grid-template-columns: 1fr 1fr;
   }
+}
 
-  .field-row.field-bool {
-    grid-column: 1 / -1;
-  }
+.field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field-row.field-bool {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.field-row.field-bool .field-label {
+  flex: 1;
+}
+
+.field-row.field-bool input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.field-label small {
+  font-weight: 500;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.field-hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.code-box {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 220px;
 }
 </style>
