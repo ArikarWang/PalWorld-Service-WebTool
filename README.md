@@ -83,9 +83,15 @@ $env:GITEE_TOKEN = "<Gitee私人令牌>"
 
 脚本会：构建前端 → 发布 win-x64 → 打 zip → 推送到 Gitee → 创建 Release 并上传附件。
 
-### 可选：Gitee Go 流水线
+### 可选：Gitee 流水线自动发版
 
-参考 [`.gitee/pipeline/release.yml`](.gitee/pipeline/release.yml)，在 Gitee 仓库「流水线」中导入后，对 `v*` tag 触发构建发版。
+新版流水线读取仓库内 [`.workflow/release.yml`](.workflow/release.yml)：
+
+1. Gitee 仓库打开「流水线」，若弹出「流水线全新升级」→ 点 **现在就升级**
+2. 确认已同步包含 `.workflow/release.yml` 的最新 `main`
+3. 推送 tag（如 `v1.0.15`）后自动构建并上传 `PalWorldService-win-x64.zip`
+
+若云端构建环境缺少 .NET/Node，仍用上面的本机 `release-gitee.ps1`。
 
 ### 客户端更新
 
@@ -123,7 +129,8 @@ web/                         # Vue3 源码
 scripts/publish.ps1          # 本地打包
 scripts/release-gitee.ps1    # 打包并发布到 Gitee Release
 scripts/start.bat            # 启动（随 publish 拷贝）
-.gitee/pipeline/release.yml  # Gitee Go 流水线参考
+.workflow/release.yml        # Gitee 流水线（推送 v* tag 自动发版）
 ```
+
 
 扩展新功能见 [docs/EXTENDING.md](docs/EXTENDING.md)。
