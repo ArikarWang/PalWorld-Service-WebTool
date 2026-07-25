@@ -190,6 +190,24 @@ public class ToolUpdateCheckService
         CollectNamedAssets(root, "assets", downloadCandidates, ref assetName, ref assetSize);
         CollectNamedAssets(root, "attach_files", downloadCandidates, ref assetName, ref assetSize);
 
+        // Latest payload often only includes source archives; query attach_files separately.
+        if (root.TryGetProperty("id", out var idEl) && idEl.TryGetInt64(out var releaseId))
+        {
+            try
+            {
+                var (foundName, foundSize) = await AppendGiteeAttachFilesAsync(
+                    client, owner, repo, releaseId, downloadCandidates, ct);
+                if (!string.IsNullOrWhiteSpace(foundName))
+                    assetName = foundName;
+                if (foundSize is not null)
+                    assetSize = foundSize;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Gitee attach_files lookup failed for release {ReleaseId}", releaseId);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(tag))
         {
             AddUnique(downloadCandidates,
@@ -239,6 +257,50 @@ public class ToolUpdateCheckService
                 ? $"管理工具有新版本：{latest}（当前 {current}），可在线更新。来源：Gitee"
                 : $"管理工具已是最新版本（{current}）。来源：Gitee",
             CheckedAtUtc: DateTime.UtcNow);
+    }
+
+    private static async Task<(string? Name, long? Size)> AppendGiteeAttachFilesAsync(
+        HttpClient client,
+        string owner,
+        string repo,
+        long releaseId,
+        List<string> downloadCandidates,
+        CancellationToken ct)
+    {
+        var url = $"https://gitee.com/api/v5/repos/{owner}/{repo}/releases/{releaseId}/attach_files";
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        using var response = await client.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode) return (null, null);
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+        if (doc.RootElement.ValueKind != JsonValueKind.Array) return (null, null);
+
+        string? foundName = null;
+        long? foundSize = null;
+        foreach (var asset in doc.RootElement.EnumerateArray())
+        {
+            var an = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
+            if (!string.Equals(an, ToolSelfUpdateService.ReleaseAssetName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            foundName = an;
+            if (asset.TryGetProperty("size", out var sz) && sz.TryGetInt64(out var size))
+                foundSize = size;
+
+            var browser = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
+            if (!string.IsNullOrWhiteSpace(browser))
+                AddUnique(downloadCandidates, browser);
+
+            if (asset.TryGetProperty("id", out var aid) && aid.TryGetInt64(out var attachId))
+            {
+                AddUnique(downloadCandidates,
+                    $"https://gitee.com/api/v5/repos/{owner}/{repo}/releases/{releaseId}/attach_files/{attachId}/download");
+            }
+        }
+
+        return (foundName, foundSize);
     }
 
     private static void CollectNamedAssets(

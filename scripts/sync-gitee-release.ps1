@@ -109,20 +109,27 @@ try {
     Write-Host "List/delete attach_files skipped: $($_.Exception.Message)"
 }
 
-Write-Host "Uploading $assetName ..."
+Write-Host "Uploading $assetName (timeout 10m) ..."
 $uploadUrl = "$apiBase/repos/$owner/$repo/releases/$releaseId/attach_files"
 $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
 if ($null -eq $curl) {
     throw "curl.exe is required to upload multipart attach_files"
 }
 
-& curl.exe -sS -f -X POST `
+# Gitee attach API expects access_token + release_id + file in multipart form.
+& curl.exe -sS -f --http1.1 `
+    --connect-timeout 30 `
+    --max-time 600 `
+    --retry 2 `
+    --retry-delay 5 `
+    -X POST `
     -F "access_token=$token" `
-    -F "file=@${ZipPath};filename=$assetName" `
+    -F "release_id=$releaseId" `
+    -F "file=@${ZipPath};filename=$assetName;type=application/zip" `
     $uploadUrl | Out-Host
 
 if ($LASTEXITCODE -ne 0) {
-    throw "Gitee attach_files upload failed (exit $LASTEXITCODE)"
+    throw "Gitee attach_files upload failed (exit $LASTEXITCODE). You can manually upload $assetName to https://gitee.com/$owner/$repo/releases/$Version"
 }
 
 Write-Host "Gitee release synced: https://gitee.com/$owner/$repo/releases/$Version"

@@ -95,6 +95,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sync release to Gitee
+        # Keep GitHub Release even if Gitee asset upload is slow/blocked from Actions.
+        continue-on-error: true
         shell: pwsh
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
