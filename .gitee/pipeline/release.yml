@@ -1,0 +1,71 @@
+# Gitee Go 流水线参考配置（社区版/企业版均可试用）
+# 使用方法：
+# 1. 打开 https://gitee.com/arikar/pal-world-service-web-tool → 流水线 → 新建
+# 2. 选择「代码视图 / YAML」，粘贴本文件内容（或按需调整）
+# 3. 触发方式建议：Push Tag（v*）
+# 4. 若云端缺少 .NET/Node，可用本机 scripts/release-gitee.ps1 发版（推荐）
+
+version: '1.0'
+name: release-win-x64
+displayName: 发布 win-x64
+triggers:
+  push:
+    tags:
+      - v*
+stages:
+  - name: build
+    displayName: 构建
+    strategy: naturally
+    trigger: auto
+    steps:
+      - step: build@nodejs
+        name: build_frontend
+        displayName: 构建前端
+        nodeVersion: 20.11.0
+        commands:
+          - cd web
+          - npm ci --registry=https://registry.npmmirror.com
+          - npm run build
+        artifacts:
+          - name: WWWROOT
+            path:
+              - src/PalWorldService.Host/wwwroot
+      - step: build@dotnet
+        name: build_dotnet
+        displayName: 发布 win-x64
+        dependsOn: build_frontend
+        # 若插件版本下拉无 8.0，选接近的 LTS 并在 commands 内自行安装
+        commands: |
+          set -e
+          VER="${GITEE_TAG#v}"
+          if [ -z "$VER" ]; then VER="0.0.${GITEE_PIPELINE_BUILD_NUMBER}"; fi
+          mkdir -p artifacts/PalWorldService
+          dotnet publish src/PalWorldService.Host/PalWorldService.Host.csproj \
+            -c Release -r win-x64 --self-contained true \
+            -p:Version=$VER -p:InformationalVersion=$VER \
+            -o artifacts/PalWorldService
+          mkdir -p artifacts/PalWorldService/config
+          cp config/servers.yaml artifacts/PalWorldService/config/servers.yaml
+          cp scripts/start.bat artifacts/PalWorldService/start.bat
+          (cd artifacts/PalWorldService && zip -r ../PalWorldService-win-x64.zip .)
+        artifacts:
+          - name: PLUGIN_RELEASE
+            path:
+              - artifacts/PalWorldService-win-x64.zip
+  - name: release
+    displayName: 发版
+    strategy: naturally
+    trigger: auto
+    steps:
+      - step: release@gitee
+        name: release_gitee
+        displayName: Gitee Release
+        releaseName: PalWorld Service ${GITEE_TAG}
+        description: PalWorld Service ${GITEE_TAG}
+        tagName: ${GITEE_TAG}
+        upstreamArtifact:
+          - PLUGIN_RELEASE
+        assertFiles:
+          - artifacts/PalWorldService-win-x64.zip
+        prerelease: false
+        allowUpdate: true
