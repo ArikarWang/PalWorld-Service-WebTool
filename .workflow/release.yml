@@ -1,9 +1,9 @@
-# Gitee 新版流水线：推送 v* tag 后自动构建并发布 Release 附件
-# 失败时请打开「构建历史」把报错步骤日志发出来，便于继续改。
+# Gitee 流水线：推送 v* tag 自动构建并发布
+# 根据失败日志：plugin-24 的 build@nodejs 未自带 npm，故在命令里自装 Node/npm/.NET
 #
-# 本机备用发版（不依赖流水线）：
+# 本机备用：
 #   $env:GITEE_TOKEN="..."
-#   .\scripts\release-gitee.ps1 -Version v1.0.15
+#   .\scripts\release-gitee.ps1 -Version v1.0.16
 
 version: '1.0'
 name: release-win-x64
@@ -21,29 +21,50 @@ stages:
     strategy: naturally
     trigger: auto
     steps:
-      # 社区版常见有 build@nodejs；.NET 在同一步里用官方脚本安装，避免缺 build@dotnet 插件
-      - step: build@nodejs
+      # 用 python 插件当壳（不依赖镜像自带 npm）；工具链全部命令内安装
+      - step: build@python
         name: build_all
-        displayName: 构建前端并打包 win-x64
-        nodeVersion: 20.11.0
+        displayName: 安装工具链并打包 win-x64
+        pythonVersion: 3.11.0
         commands: |
           set -eux
           echo "TAG=${GITEE_TAG:-} BRANCH=${GITEE_BRANCH:-} COMMIT=${GITEE_COMMIT:-}"
+          pwd
+          ls -la
 
+          # ---- Node 20（npmmirror）----
+          NODE_VER=20.11.0
+          curl -fsSL "https://npmmirror.com/mirrors/node/v${NODE_VER}/node-v${NODE_VER}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+          mkdir -p "$HOME/node"
+          tar -xJf /tmp/node.tar.xz -C "$HOME/node" --strip-components=1
+          export PATH="$HOME/node/bin:$PATH"
+          node -v
+          npm -v
+
+          # ---- 前端 ----
           cd web
           npm ci --registry=https://registry.npmmirror.com
           npm run build
           cd ..
 
+          # ---- .NET 8 ----
           curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
           bash /tmp/dotnet-install.sh --channel 8.0 --install-dir "$HOME/.dotnet"
           export DOTNET_ROOT="$HOME/.dotnet"
           export PATH="$HOME/.dotnet:$PATH"
           dotnet --info
 
-          VER="${GITEE_TAG#v}"
-          if [ -z "$VER" ]; then VER="0.0.${GITEE_PIPELINE_BUILD_NUMBER:-0}"; fi
-          echo "Embedding version: $VER"
+          # ---- 版本号：优先 tag，否则读 csproj ----
+          if [ -n "${GITEE_TAG:-}" ]; then
+            VER="${GITEE_TAG#v}"
+            TAG_NAME="$GITEE_TAG"
+          else
+            VER="$(sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' src/PalWorldService.Host/PalWorldService.Host.csproj | head -1)"
+            TAG_NAME="v${VER}"
+          fi
+          echo "VERSION=$VER TAG_NAME=$TAG_NAME"
+          echo "$TAG_NAME" > .release-tag
+          echo "$VER" > .release-version
 
           mkdir -p artifacts/PalWorldService/config
           dotnet publish src/PalWorldService.Host/PalWorldService.Host.csproj \
@@ -54,21 +75,17 @@ stages:
           cp scripts/start.bat artifacts/PalWorldService/start.bat
           test -f artifacts/PalWorldService/PalWorldService.exe
 
-          if command -v zip >/dev/null 2>&1; then
-            (cd artifacts/PalWorldService && zip -qr ../PalWorldService-win-x64.zip .)
-          else
-            python3 - <<'PY'
+          python3 - <<'PY'
           import shutil
           shutil.make_archive("artifacts/PalWorldService-win-x64", "zip", "artifacts/PalWorldService")
           PY
-          fi
-
           cp artifacts/PalWorldService-win-x64.zip ./PalWorldService-win-x64.zip
-          ls -lh PalWorldService-win-x64.zip
+          ls -lh PalWorldService-win-x64.zip .release-tag
         artifacts:
           - name: PLUGIN_RELEASE
             path:
               - PalWorldService-win-x64.zip
+              - .release-tag
 
   - stage: release
     displayName: 发版
@@ -78,6 +95,8 @@ stages:
       - step: release@gitee
         name: release_gitee
         displayName: Gitee Release
+        # 手动跑 main 时 GITEE_TAG 为空；用 allowUpdate + 构建产物里的 tag 更稳
+        # 若插件只认 ${GITEE_TAG}，请用「推送 tag」触发，不要手动跑 main
         releaseName: PalWorld Service ${GITEE_TAG}
         description: PalWorld Service ${GITEE_TAG}
         tagName: ${GITEE_TAG}
