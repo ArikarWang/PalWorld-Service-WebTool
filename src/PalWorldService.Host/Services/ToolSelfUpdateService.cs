@@ -97,9 +97,13 @@ public class ToolSelfUpdateService
             throw new InvalidOperationException("更新包缺少 PalWorldService.exe，已中止。");
 
         var pid = Environment.ProcessId;
-        await File.WriteAllTextAsync(helperPath, BuildHelperScript(), ct);
+        // Bake paths into the script: `cmd /c start "title" bat args` drops %1..%n on Windows.
+        await File.WriteAllTextAsync(
+            helperPath,
+            BuildHelperScript(installDir, stagingDir, pid, logPath),
+            ct);
 
-        LaunchHelper(helperPath, installDir, stagingDir, pid, logPath);
+        LaunchHelper(helperPath);
         _logger.LogWarning(
             "Tool update helper launched. Will replace install at {Install} then restart. Log: {Log}",
             installDir,
@@ -183,22 +187,15 @@ public class ToolSelfUpdateService
         }
     }
 
-    private static void LaunchHelper(
-        string helperPath,
-        string installDir,
-        string stagingDir,
-        int pid,
-        string logPath)
+    private static void LaunchHelper(string helperPath)
     {
-        var args =
-            $"/c start \"PalWorldServiceUpdate\" /min \"{helperPath}\" " +
-            $"\"{installDir}\" \"{stagingDir}\" {pid} \"{logPath}\"";
-
+        // Detach via `start` so the helper survives host shutdown. No CLI args —
+        // install/staging/pid/log are baked into the bat (start drops trailing args).
         Process.Start(new ProcessStartInfo
         {
             FileName = "cmd.exe",
-            Arguments = args,
-            UseShellExecute = true,
+            Arguments = $"/c start \"PalWorldServiceUpdate\" /min \"{helperPath}\"",
+            UseShellExecute = false,
             CreateNoWindow = true,
             WorkingDirectory = Path.GetDirectoryName(helperPath) ?? Path.GetTempPath()
         });
@@ -206,25 +203,50 @@ public class ToolSelfUpdateService
 
     /// <summary>
     /// Windows helper: wait for PID, copy staging over install (preserve config/data/backups/logs), restart.
-    /// %1 install  %2 staging  %3 pid  %4 log
+    /// Paths are embedded (not passed as %1..) because `start "title" bat args` drops arguments.
     /// </summary>
-    internal static string BuildHelperScript()
+    internal static string BuildHelperScript(
+        string installDir,
+        string stagingDir,
+        int pid,
+        string logPath)
     {
+        static string BatEscape(string path) =>
+            path.Replace("^", "^^").Replace("&", "^&").Replace("%", "%%");
+
+        var install = BatEscape(Path.GetFullPath(installDir));
+        var staging = BatEscape(Path.GetFullPath(stagingDir));
+        var log = BatEscape(Path.GetFullPath(logPath));
+
         var sb = new StringBuilder();
         sb.AppendLine("@echo off");
         sb.AppendLine("setlocal EnableExtensions");
-        sb.AppendLine("set \"INSTALL=%~1\"");
-        sb.AppendLine("set \"STAGING=%~2\"");
-        sb.AppendLine("set \"PID=%~3\"");
-        sb.AppendLine("set \"LOG=%~4\"");
+        sb.AppendLine($"set \"INSTALL={install}\"");
+        sb.AppendLine($"set \"STAGING={staging}\"");
+        sb.AppendLine($"set \"PID={pid}\"");
+        sb.AppendLine($"set \"LOG={log}\"");
         sb.AppendLine("if \"%LOG%\"==\"\" set \"LOG=%TEMP%\\PalWorldService-update\\apply.log\"");
         sb.AppendLine("echo [%date% %time%] apply start >> \"%LOG%\"");
         sb.AppendLine("echo install=%INSTALL% >> \"%LOG%\"");
         sb.AppendLine("echo staging=%STAGING% >> \"%LOG%\"");
         sb.AppendLine("echo pid=%PID% >> \"%LOG%\"");
         sb.AppendLine();
+        sb.AppendLine("if \"%INSTALL%\"==\"\" (");
+        sb.AppendLine("  echo [%date% %time%] missing INSTALL path >> \"%LOG%\"");
+        sb.AppendLine("  exit /b 1");
+        sb.AppendLine(")");
+        sb.AppendLine("if \"%STAGING%\"==\"\" (");
+        sb.AppendLine("  echo [%date% %time%] missing STAGING path >> \"%LOG%\"");
+        sb.AppendLine("  exit /b 1");
+        sb.AppendLine(")");
+        sb.AppendLine("if not exist \"%STAGING%\\PalWorldService.exe\" (");
+        sb.AppendLine("  echo [%date% %time%] staging missing PalWorldService.exe >> \"%LOG%\"");
+        sb.AppendLine("  exit /b 1");
+        sb.AppendLine(")");
+        sb.AppendLine();
         sb.AppendLine("set /a WAITED=0");
         sb.AppendLine(":waitloop");
+        sb.AppendLine("if \"%PID%\"==\"\" goto copyfiles");
         sb.AppendLine("tasklist /FI \"PID eq %PID%\" 2>NUL | find \"%PID%\" >NUL");
         sb.AppendLine("if errorlevel 1 goto copyfiles");
         sb.AppendLine("timeout /t 1 /nobreak >NUL");
