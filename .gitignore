@@ -18,6 +18,7 @@ logs/
 
 ## Publish
 publish/
+artifacts/
 
 ## OS
 Thumbs.db
