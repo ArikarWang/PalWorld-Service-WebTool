@@ -58,6 +58,9 @@ jobs:
           ls -lh artifacts/PalWorldService-win-x64.zip
 
       - name: Sync git + upload zip to Gitee
+        # Overseas runners often stall uploading ~45MB to Gitee; prefer Gitee Go pipeline.
+        continue-on-error: true
+        timeout-minutes: 12
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           TAG: ${{ steps.ver.outputs.tag }}
