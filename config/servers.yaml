@@ -2,11 +2,13 @@
 dataDirectory: "data"
 backupDirectory: "backups"
 monitorIntervalSeconds: 30
-# 管理工具更新检查（GitHub Releases），一般无需修改
+# 管理工具更新源（默认 Gitee，国内直连）
+# updateSource: gitee          # gitee | github | auto
+# giteeOwner: arikar
+# giteeRepo: pal-world-service-web-tool
+# 回退 GitHub（updateSource: github/auto 时使用）
 # githubOwner: ArikarWang
 # githubRepo: PalWorld-Service-WebTool
-# 国内无法直连 github.com 时可选配置代理前缀（也可不配：程序会自动尝试公共加速）
-# 推荐：https://ghfast.top/ 或 https://ghproxy.net/
 # githubProxy: "https://ghfast.top/"
 
 servers:

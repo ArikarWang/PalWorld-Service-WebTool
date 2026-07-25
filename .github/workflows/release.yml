@@ -91,3 +91,19 @@ jobs:
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync release to Gitee
+        shell: pwsh
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_OWNER: arikar
+          GITEE_REPO: pal-world-service-web-tool
+          GITEE_TARGET_COMMITISH: main
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:GITEE_TOKEN)) {
+            Write-Warning "Secret GITEE_TOKEN is not configured; skip Gitee sync."
+            exit 0
+          }
+          ./scripts/sync-gitee-release.ps1 `
+            -Version "${{ steps.ver.outputs.version }}" `
+            -ZipPath "artifacts/PalWorldService-win-x64.zip"

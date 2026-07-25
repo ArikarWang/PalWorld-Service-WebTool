@@ -12,7 +12,7 @@ public class ToolUpdateCheckService
 {
     /// <summary>
     /// Free prefix mirrors that typically work for github.com/releases (not api.github.com).
-    /// Tried automatically when direct access fails.
+    /// Used only when updateSource involves GitHub.
     /// </summary>
     private static readonly string[] BuiltinProxies =
     [
@@ -59,6 +59,54 @@ public class ToolUpdateCheckService
     public async Task<ToolUpdateCheckResult> CheckAsync(CancellationToken ct = default)
     {
         var current = NormalizeVersion(GetCurrentVersion());
+        var source = GetUpdateSource();
+        var errors = new List<string>();
+
+        if (source is "gitee" or "auto")
+        {
+            try
+            {
+                var gitee = await CheckViaGiteeApiAsync(current, ct);
+                if (gitee.Checked)
+                    return gitee;
+                if (!string.IsNullOrWhiteSpace(gitee.Message))
+                    errors.Add($"Gitee: {gitee.Message}");
+            }
+            catch (Exception ex)
+            {
+                var msg = FlattenExceptionMessage(ex);
+                _logger.LogWarning(ex, "Gitee release check failed");
+                errors.Add($"Gitee: {msg}");
+            }
+
+            if (source == "gitee")
+            {
+                return Fail(current,
+                    "无法从 Gitee 获取最新版本。" +
+                    "请确认 Gitee Release 已发布安装包，或将 updateSource 设为 auto/github。" +
+                    " 详情：" + string.Join(" | ", errors.Take(3)));
+            }
+        }
+
+        if (source is "github" or "auto")
+        {
+            var gh = await CheckViaGithubAsync(current, errors, ct);
+            if (gh.Checked)
+                return gh;
+        }
+
+        return Fail(current,
+            "无法获取最新版本。" +
+            "默认使用 Gitee（https://gitee.com/arikar/pal-world-service-web-tool）；" +
+            "也可在 config/servers.yaml 设置 updateSource: auto 或 github。" +
+            " 详情：" + string.Join(" | ", errors.Take(3)));
+    }
+
+    private async Task<ToolUpdateCheckResult> CheckViaGithubAsync(
+        string current,
+        List<string> errors,
+        CancellationToken ct)
+    {
         var owner = string.IsNullOrWhiteSpace(_config.Current.GithubOwner)
             ? "ArikarWang"
             : _config.Current.GithubOwner!;
@@ -66,10 +114,6 @@ public class ToolUpdateCheckService
             ? "PalWorld-Service-WebTool"
             : _config.Current.GithubRepo!;
 
-        var errors = new List<string>();
-
-        // Prefer configured proxy, then built-ins, then direct.
-        // Many free proxies break api.github.com but work for /releases pages + assets.
         foreach (var proxy in BuildProxyCandidates())
         {
             try
@@ -88,7 +132,6 @@ public class ToolUpdateCheckService
             }
         }
 
-        // Last resort: official API (often blocked / rate-limited in CN)
         try
         {
             var apiResult = await CheckViaGithubApiAsync(current, owner, repo, GetGithubProxy(), ct);
@@ -103,10 +146,136 @@ public class ToolUpdateCheckService
             _logger.LogWarning(ex, "GitHub API check failed");
         }
 
-        return Fail(current,
-            "无法获取最新版本（直连与代理均失败）。" +
-            "可在 config/servers.yaml 设置 githubProxy（如 https://ghfast.top/）后重试。" +
-            " 详情：" + string.Join(" | ", errors.Take(3)));
+        return Fail(current, "GitHub 检查失败");
+    }
+
+    private async Task<ToolUpdateCheckResult> CheckViaGiteeApiAsync(string current, CancellationToken ct)
+    {
+        var owner = string.IsNullOrWhiteSpace(_config.Current.GiteeOwner)
+            ? "arikar"
+            : _config.Current.GiteeOwner!;
+        var repo = string.IsNullOrWhiteSpace(_config.Current.GiteeRepo)
+            ? "pal-world-service-web-tool"
+            : _config.Current.GiteeRepo!;
+
+        var apiUrl = $"https://gitee.com/api/v5/repos/{owner}/{repo}/releases/latest";
+        var client = _httpClientFactory.CreateClient("GitHub");
+        using var request = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("PalWorldService", current));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        using var response = await client.SendAsync(request, ct);
+        var bodyText = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            return Fail(current,
+                $"HTTP {(int)response.StatusCode}" +
+                (bodyText.Length is > 0 and < 240 ? $": {bodyText.Trim()}" : ""));
+        }
+
+        using var doc = JsonDocument.Parse(bodyText);
+        var root = doc.RootElement;
+
+        var tag = root.TryGetProperty("tag_name", out var tagEl) ? tagEl.GetString() : null;
+        var name = root.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
+        var htmlUrl = root.TryGetProperty("html_url", out var urlEl) ? urlEl.GetString() : null;
+        if (string.IsNullOrWhiteSpace(htmlUrl) && !string.IsNullOrWhiteSpace(tag))
+            htmlUrl = $"https://gitee.com/{owner}/{repo}/releases/{tag}";
+
+        var downloadCandidates = new List<string>();
+        string? assetName = null;
+        long? assetSize = null;
+
+        // Gitee may put files under "assets" and/or require attach_files listing.
+        CollectNamedAssets(root, "assets", downloadCandidates, ref assetName, ref assetSize);
+        CollectNamedAssets(root, "attach_files", downloadCandidates, ref assetName, ref assetSize);
+
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            AddUnique(downloadCandidates,
+                $"https://gitee.com/{owner}/{repo}/releases/download/{tag.Trim()}/{ToolSelfUpdateService.ReleaseAssetName}");
+        }
+
+        // Always offer GitHub mirrors of the same tag as download fallbacks.
+        if (!string.IsNullOrWhiteSpace(tag))
+        {
+            var ghOwner = string.IsNullOrWhiteSpace(_config.Current.GithubOwner)
+                ? "ArikarWang"
+                : _config.Current.GithubOwner!;
+            var ghRepo = string.IsNullOrWhiteSpace(_config.Current.GithubRepo)
+                ? "PalWorld-Service-WebTool"
+                : _config.Current.GithubRepo!;
+            var ghAsset =
+                $"https://github.com/{ghOwner}/{ghRepo}/releases/download/{tag.Trim()}/{ToolSelfUpdateService.ReleaseAssetName}";
+            AddUnique(downloadCandidates, ghAsset);
+            foreach (var proxy in BuildProxyCandidates())
+            {
+                if (proxy is null) continue;
+                AddUnique(downloadCandidates, ApplyProxy(proxy, ghAsset));
+            }
+        }
+
+        var latest = NormalizeVersion(tag ?? "");
+        if (string.IsNullOrWhiteSpace(latest))
+            return Fail(current, "最新 Release 缺少有效版本号");
+
+        assetName ??= ToolSelfUpdateService.ReleaseAssetName;
+        var primary = downloadCandidates.FirstOrDefault();
+        var updateAvailable = CompareSemVer(latest, current) > 0;
+
+        return new ToolUpdateCheckResult(
+            Checked: true,
+            UpdateAvailable: updateAvailable,
+            CurrentVersion: current,
+            LatestVersion: latest,
+            ReleaseName: name ?? $"PalWorld Service {tag}",
+            ReleaseUrl: htmlUrl,
+            DownloadUrl: primary,
+            DownloadUrls: downloadCandidates,
+            AssetName: assetName,
+            AssetSizeBytes: assetSize,
+            PublishedAtUtc: null,
+            Message: updateAvailable
+                ? $"管理工具有新版本：{latest}（当前 {current}），可在线更新。来源：Gitee"
+                : $"管理工具已是最新版本（{current}）。来源：Gitee",
+            CheckedAtUtc: DateTime.UtcNow);
+    }
+
+    private static void CollectNamedAssets(
+        JsonElement root,
+        string propertyName,
+        List<string> downloadCandidates,
+        ref string? assetName,
+        ref long? assetSize)
+    {
+        if (!root.TryGetProperty(propertyName, out var assets) || assets.ValueKind != JsonValueKind.Array)
+            return;
+
+        foreach (var asset in assets.EnumerateArray())
+        {
+            var an = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
+            if (!string.Equals(an, ToolSelfUpdateService.ReleaseAssetName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            assetName = an;
+            if (asset.TryGetProperty("size", out var sz) && sz.TryGetInt64(out var size))
+                assetSize = size;
+
+            var browser = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
+            if (!string.IsNullOrWhiteSpace(browser))
+                AddUnique(downloadCandidates, browser);
+
+            // Some Gitee payloads expose download URL under "browser_url" / "url".
+            var browserUrl = asset.TryGetProperty("browser_url", out var bu) ? bu.GetString() : null;
+            if (!string.IsNullOrWhiteSpace(browserUrl) &&
+                browserUrl.Contains("http", StringComparison.OrdinalIgnoreCase))
+                AddUnique(downloadCandidates, browserUrl);
+
+            var url = asset.TryGetProperty("url", out var uu) ? uu.GetString() : null;
+            if (!string.IsNullOrWhiteSpace(url) &&
+                url.EndsWith("/download", StringComparison.OrdinalIgnoreCase))
+                AddUnique(downloadCandidates, url);
+        }
     }
 
     private IEnumerable<string?> BuildProxyCandidates()
@@ -161,16 +330,35 @@ public class ToolUpdateCheckService
             return Fail(current, "解析到的版本号无效");
 
         var releaseUrl = $"https://github.com/{owner}/{repo}/releases/tag/{tagRaw.Trim()}";
-        var assetRaw = $"https://github.com/{owner}/{repo}/releases/download/{tagRaw.Trim()}/{ToolSelfUpdateService.ReleaseAssetName}";
-        var downloadUrl = ApplyProxy(proxy, assetRaw);
+        var assetRaw =
+            $"https://github.com/{owner}/{repo}/releases/download/{tagRaw.Trim()}/{ToolSelfUpdateService.ReleaseAssetName}";
+        var downloadCandidates = new List<string>();
+        AddUnique(downloadCandidates, ApplyProxy(proxy, assetRaw));
+
+        // Prefer Gitee copy of the same version when available as alternate download.
+        var giteeOwner = string.IsNullOrWhiteSpace(_config.Current.GiteeOwner)
+            ? "arikar"
+            : _config.Current.GiteeOwner!;
+        var giteeRepo = string.IsNullOrWhiteSpace(_config.Current.GiteeRepo)
+            ? "pal-world-service-web-tool"
+            : _config.Current.GiteeRepo!;
+        AddUnique(downloadCandidates,
+            $"https://gitee.com/{giteeOwner}/{giteeRepo}/releases/download/{tagRaw.Trim()}/{ToolSelfUpdateService.ReleaseAssetName}");
+
+        foreach (var p in BuildProxyCandidates())
+        {
+            if (p is null || string.Equals(p, proxy, StringComparison.OrdinalIgnoreCase))
+                continue;
+            AddUnique(downloadCandidates, ApplyProxy(p, assetRaw));
+        }
 
         var updateAvailable = CompareSemVer(latest, current) > 0;
         var via = LabelProxy(proxy);
         string message;
         if (!updateAvailable)
-            message = $"管理工具已是最新版本（{current}）。来源：{via}";
+            message = $"管理工具已是最新版本（{current}）。来源：GitHub/{via}";
         else
-            message = $"管理工具有新版本：{latest}（当前 {current}），可在线更新。来源：{via}";
+            message = $"管理工具有新版本：{latest}（当前 {current}），可在线更新。来源：GitHub/{via}";
 
         return new ToolUpdateCheckResult(
             Checked: true,
@@ -179,7 +367,8 @@ public class ToolUpdateCheckService
             LatestVersion: latest,
             ReleaseName: $"PalWorld Service {tagRaw.Trim()}",
             ReleaseUrl: releaseUrl,
-            DownloadUrl: downloadUrl,
+            DownloadUrl: downloadCandidates.FirstOrDefault(),
+            DownloadUrls: downloadCandidates,
             AssetName: ToolSelfUpdateService.ReleaseAssetName,
             AssetSizeBytes: null,
             PublishedAtUtc: null,
@@ -202,10 +391,7 @@ public class ToolUpdateCheckService
 
         using var response = await client.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(ct);
             return Fail(current, $"HTTP {(int)response.StatusCode}");
-        }
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
@@ -215,37 +401,41 @@ public class ToolUpdateCheckService
         var name = root.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
         var htmlUrl = root.TryGetProperty("html_url", out var urlEl) ? urlEl.GetString() : null;
 
-        string? downloadUrl = null;
+        var downloadCandidates = new List<string>();
         string? assetName = null;
         long? assetSize = null;
-        if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+        CollectNamedAssets(root, "assets", downloadCandidates, ref assetName, ref assetSize);
+
+        // Re-apply proxy to github asset URLs from API.
+        if (downloadCandidates.Count > 0 && !string.IsNullOrWhiteSpace(proxy))
         {
-            foreach (var asset in assets.EnumerateArray())
-            {
-                var an = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
-                if (!string.Equals(an, ToolSelfUpdateService.ReleaseAssetName, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                assetName = an;
-                var rawDownload = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
-                downloadUrl = string.IsNullOrWhiteSpace(rawDownload) ? null : ApplyProxy(proxy, rawDownload);
-                if (asset.TryGetProperty("size", out var sz) && sz.TryGetInt64(out var size))
-                    assetSize = size;
-                break;
-            }
+            var proxied = downloadCandidates
+                .Select(u => ApplyProxy(proxy, u))
+                .ToList();
+            downloadCandidates.Clear();
+            foreach (var u in proxied) AddUnique(downloadCandidates, u);
         }
 
-        // If API omitted assets, still construct download URL from tag
-        if (string.IsNullOrWhiteSpace(downloadUrl) && !string.IsNullOrWhiteSpace(tag))
+        if (!string.IsNullOrWhiteSpace(tag))
         {
-            downloadUrl = ApplyProxy(proxy,
-                $"https://github.com/{owner}/{repo}/releases/download/{tag}/{ToolSelfUpdateService.ReleaseAssetName}");
-            assetName ??= ToolSelfUpdateService.ReleaseAssetName;
+            AddUnique(downloadCandidates, ApplyProxy(proxy,
+                $"https://github.com/{owner}/{repo}/releases/download/{tag}/{ToolSelfUpdateService.ReleaseAssetName}"));
+
+            var giteeOwner = string.IsNullOrWhiteSpace(_config.Current.GiteeOwner)
+                ? "arikar"
+                : _config.Current.GiteeOwner!;
+            var giteeRepo = string.IsNullOrWhiteSpace(_config.Current.GiteeRepo)
+                ? "pal-world-service-web-tool"
+                : _config.Current.GiteeRepo!;
+            AddUnique(downloadCandidates,
+                $"https://gitee.com/{giteeOwner}/{giteeRepo}/releases/download/{tag}/{ToolSelfUpdateService.ReleaseAssetName}");
         }
 
         var latest = NormalizeVersion(tag ?? "");
         if (string.IsNullOrWhiteSpace(latest))
             return Fail(current, "最新 Release 缺少有效版本号");
 
+        assetName ??= ToolSelfUpdateService.ReleaseAssetName;
         var updateAvailable = CompareSemVer(latest, current) > 0;
         return new ToolUpdateCheckResult(
             Checked: true,
@@ -254,7 +444,8 @@ public class ToolUpdateCheckService
             LatestVersion: latest,
             ReleaseName: name,
             ReleaseUrl: htmlUrl,
-            DownloadUrl: downloadUrl,
+            DownloadUrl: downloadCandidates.FirstOrDefault(),
+            DownloadUrls: downloadCandidates,
             AssetName: assetName,
             AssetSizeBytes: assetSize,
             PublishedAtUtc: null,
@@ -280,6 +471,17 @@ public class ToolUpdateCheckService
 
     public string? GetGithubProxy() => NormalizeProxy(_config.Current.GithubProxy);
 
+    public string GetUpdateSource()
+    {
+        var raw = (_config.Current.UpdateSource ?? "gitee").Trim().ToLowerInvariant();
+        return raw switch
+        {
+            "github" => "github",
+            "auto" => "auto",
+            _ => "gitee",
+        };
+    }
+
     public static string ApplyProxy(string? proxy, string url)
     {
         if (string.IsNullOrWhiteSpace(url)) return url;
@@ -295,21 +497,22 @@ public class ToolUpdateCheckService
     internal static string FormatNetworkError(Exception ex)
     {
         var text = FlattenExceptionMessage(ex);
-        if (IsGithubConnectivityFailure(ex, text))
+        if (IsConnectivityFailure(ex, text))
         {
-            return "无法连接 GitHub。" +
-                   "程序会自动尝试公共加速；也可在 config/servers.yaml 设置 githubProxy: \"https://ghfast.top/\"。" +
+            return "无法连接更新源。" +
+                   "默认从 Gitee 下载；也可在 config/servers.yaml 设置 updateSource: auto。" +
                    $" 原始错误：{text}";
         }
 
         return $"检查管理工具更新失败：{text}";
     }
 
-    private static bool IsGithubConnectivityFailure(Exception ex, string text)
+    private static bool IsConnectivityFailure(Exception ex, string text)
     {
         if (ex is HttpRequestException or TaskCanceledException or SocketException or IOException)
         {
             if (text.Contains("github.com", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("gitee.com", StringComparison.OrdinalIgnoreCase) ||
                 text.Contains("443", StringComparison.Ordinal) ||
                 text.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
                 text.Contains("Timeout", StringComparison.OrdinalIgnoreCase) ||
@@ -321,7 +524,8 @@ public class ToolUpdateCheckService
                 return true;
         }
 
-        return text.Contains("github.com", StringComparison.OrdinalIgnoreCase) &&
+        return (text.Contains("github.com", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("gitee.com", StringComparison.OrdinalIgnoreCase)) &&
                (text.Contains("连接", StringComparison.Ordinal) ||
                 text.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
                 text.Contains("443", StringComparison.Ordinal));
@@ -350,6 +554,14 @@ public class ToolUpdateCheckService
     private static string LabelProxy(string? proxy)
         => string.IsNullOrWhiteSpace(proxy) ? "直连" : proxy.TrimEnd('/');
 
+    private static void AddUnique(List<string> list, string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        if (list.Any(x => string.Equals(x, url, StringComparison.OrdinalIgnoreCase)))
+            return;
+        list.Add(url);
+    }
+
     private static ToolUpdateCheckResult Fail(string current, string message) => new(
         Checked: false,
         UpdateAvailable: false,
@@ -358,6 +570,7 @@ public class ToolUpdateCheckService
         ReleaseName: null,
         ReleaseUrl: null,
         DownloadUrl: null,
+        DownloadUrls: null,
         AssetName: null,
         AssetSizeBytes: null,
         PublishedAtUtc: null,
@@ -410,6 +623,7 @@ public record ToolUpdateCheckResult(
     string? ReleaseName,
     string? ReleaseUrl,
     string? DownloadUrl,
+    IReadOnlyList<string>? DownloadUrls,
     string? AssetName,
     long? AssetSizeBytes,
     DateTime? PublishedAtUtc,
