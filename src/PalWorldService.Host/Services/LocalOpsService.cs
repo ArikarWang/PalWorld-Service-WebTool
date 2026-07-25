@@ -30,6 +30,63 @@ public class LocalOpsService
         await File.WriteAllTextAsync(server.ConfigPath!, content, ct);
     }
 
+    /// <summary>
+    /// Open the server config file (or its folder) in the OS file manager.
+    /// </summary>
+    public string RevealConfigInFileManager(ServerConfig server)
+    {
+        EnsurePath(server.ConfigPath, "configPath");
+        var path = Path.GetFullPath(server.ConfigPath!);
+        var dir = Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(dir))
+            throw new InvalidOperationException("Config path has no parent directory.");
+
+        Directory.CreateDirectory(dir);
+
+        if (OperatingSystem.IsWindows())
+        {
+            if (File.Exists(path))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                    UseShellExecute = true
+                });
+            }
+            else
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"\"{dir}\"",
+                    UseShellExecute = true
+                });
+            }
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            var args = File.Exists(path) ? $"-R \"{path}\"" : $"\"{dir}\"";
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "open",
+                Arguments = args,
+                UseShellExecute = true
+            });
+        }
+        else
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "xdg-open",
+                Arguments = $"\"{dir}\"",
+                UseShellExecute = true
+            });
+        }
+
+        return path;
+    }
+
     public async Task<IReadOnlyList<string>> ReadLogsAsync(ServerConfig server, int lines, CancellationToken ct)
     {
         EnsurePath(server.LogDirectory, "logDirectory", isDir: true);

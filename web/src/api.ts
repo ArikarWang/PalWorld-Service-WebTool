@@ -54,6 +54,8 @@ export const api = {
   getConfig: (id: string) => request<{ content: string }>(`/servers/${id}/config`),
   putConfig: (id: string, content: string) =>
     request(`/servers/${id}/config`, { method: 'PUT', body: JSON.stringify({ content }) }),
+  revealConfig: (id: string) =>
+    request<{ ok: boolean; path: string }>(`/servers/${id}/config/reveal`, { method: 'POST' }),
   logs: (id: string, lines = 300) => request<string[]>(`/servers/${id}/logs?lines=${lines}`),
   process: (id: string) => request<{ running: boolean }>(`/servers/${id}/process`),
   processStart: (id: string) => request(`/servers/${id}/process/start`, { method: 'POST' }),
