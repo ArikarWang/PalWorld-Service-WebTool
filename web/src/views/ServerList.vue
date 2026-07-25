@@ -26,9 +26,8 @@
       <h3>管理工具更新</h3>
       <p class="meta" style="margin-bottom: var(--space-3)">
         当前版本 <strong class="mono">{{ toolVersion || '…' }}</strong>。
-        默认从 Gitee Release 检查/下载更新；有更新时可一键安装并自动重启（保留 config/servers.yaml）。
-        仓库：<code>gitee.com/arikar/pal-world-service-web-tool</code>。
-        如需回退可在 servers.yaml 设置 <code>updateSource: auto</code> 或 <code>github</code>。
+        从 Gitee Release 检查/下载更新；有更新时可一键安装并自动重启（保留 config/servers.yaml）。
+        仓库：<a href="https://gitee.com/arikar/pal-world-service-web-tool" target="_blank" rel="noopener">gitee.com/arikar/pal-world-service-web-tool</a>
       </p>
       <div class="btn-row">
         <button class="btn" :disabled="checkingTool || applying" @click="checkToolUpdate">

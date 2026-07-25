@@ -2,7 +2,8 @@
 param(
     [string]$OutputDir = "publish",
     [ValidateSet("Release", "Debug")]
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [string]$Version = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,11 +18,15 @@ try {
     Pop-Location
 
     Write-Host ">>> Publishing Host (win-x64 self-contained)..." -ForegroundColor Cyan
-    $verNum = "1.0.13"
-    try {
-        $tag = (git describe --tags --abbrev=0 2>$null)
-        if ($tag) { $verNum = ($tag -replace '^v','') }
-    } catch { }
+    $verNum = "1.0.14"
+    if (-not [string]::IsNullOrWhiteSpace($Version)) {
+        $verNum = $Version.Trim().TrimStart("v", "V")
+    } else {
+        try {
+            $tag = (git describe --tags --abbrev=0 2>$null)
+            if ($tag) { $verNum = ($tag -replace '^v', '') }
+        } catch { }
+    }
 
     if (Test-Path $OutputDir) {
         # Keep user config if present

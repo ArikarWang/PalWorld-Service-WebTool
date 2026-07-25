@@ -8,8 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace PalWorldService.Host.Services;
 
 /// <summary>
-/// Downloads the latest Release zip (Gitee first, GitHub fallbacks), stages it,
-/// then launches a helper that replaces files after this process exits and restarts start.bat.
+/// Downloads the latest Gitee Release zip, stages it, then launches a helper that
+/// replaces files after this process exits and restarts start.bat.
 /// </summary>
 public class ToolSelfUpdateService
 {
@@ -40,7 +40,7 @@ public class ToolSelfUpdateService
         var urls = BuildDownloadCandidates(check);
         if (urls.Count == 0)
             throw new InvalidOperationException(
-                $"最新 Release 未找到资源 {ReleaseAssetName}，请手动从 Gitee/GitHub 下载。");
+                $"最新 Release 未找到资源 {ReleaseAssetName}，请手动从 Gitee 下载。");
 
         var installDir = Path.GetFullPath(AppContext.BaseDirectory.TrimEnd(
             Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -140,7 +140,7 @@ public class ToolSelfUpdateService
 
     private async Task DownloadAsync(string url, string zipPath, CancellationToken ct)
     {
-        var client = _httpClientFactory.CreateClient("GitHubDownload");
+        var client = _httpClientFactory.CreateClient("GiteeDownload");
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.UserAgent.Add(new ProductInfoHeaderValue(
             "PalWorldService",

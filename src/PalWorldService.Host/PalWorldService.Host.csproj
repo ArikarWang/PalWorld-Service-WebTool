@@ -5,8 +5,8 @@
     <Nullable>enable</Nullable>
     <RootNamespace>PalWorldService.Host</RootNamespace>
     <AssemblyName>PalWorldService</AssemblyName>
-    <Version>1.0.13</Version>
-    <InformationalVersion>1.0.13</InformationalVersion>
+    <Version>1.0.14</Version>
+    <InformationalVersion>1.0.14</InformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\PalWorldService.Shared\PalWorldService.Shared.csproj" />

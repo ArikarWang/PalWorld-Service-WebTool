@@ -59,12 +59,12 @@ builder.Services.AddSingleton<ScheduleStore>();
 builder.Services.AddSingleton<ScheduleExecutor>();
 builder.Services.AddHttpClient("Palworld", c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient("SteamInfo", c => c.Timeout = TimeSpan.FromSeconds(20));
-builder.Services.AddHttpClient("GitHub", c =>
+builder.Services.AddHttpClient("Gitee", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(25);
     c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; PalWorldService/1.0)");
 });
-builder.Services.AddHttpClient("GitHubDownload", c =>
+builder.Services.AddHttpClient("GiteeDownload", c =>
 {
     c.Timeout = TimeSpan.FromMinutes(10);
     c.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; PalWorldService/1.0)");

@@ -2,14 +2,9 @@
 dataDirectory: "data"
 backupDirectory: "backups"
 monitorIntervalSeconds: 30
-# 管理工具更新源（默认 Gitee，国内直连）
-# updateSource: gitee          # gitee | github | auto
+# 管理工具更新源（Gitee Releases）
 # giteeOwner: arikar
 # giteeRepo: pal-world-service-web-tool
-# 回退 GitHub（updateSource: github/auto 时使用）
-# githubOwner: ArikarWang
-# githubRepo: PalWorld-Service-WebTool
-# githubProxy: "https://ghfast.top/"
 
 servers:
   - id: main

@@ -2,6 +2,8 @@
 
 幻兽帕鲁 1.0 专用服务器管理端。控制台窗口运行，浏览器打开使用。配置文件驱动服务器列表，按服网页密码登录。
 
+**代码与发版仓库（主仓库）：** https://gitee.com/arikar/pal-world-service-web-tool
+
 ## 快速使用（mini 主机）
 
 1. 在开发机执行：
@@ -17,6 +19,9 @@ cd d:\Job\PalWorldService
 5. 浏览器打开：`http://127.0.0.1:5080` 或 `http://<局域网IP>:5080`
 6. 关闭方式：网页右上角「关闭管理服务」，或直接关控制台窗口
 
+也可直接从 Gitee Release 下载 `PalWorldService-win-x64.zip`：  
+https://gitee.com/arikar/pal-world-service-web-tool/releases
+
 ## 登录说明
 
 - 主界面显示配置中的服务器列表
@@ -29,6 +34,8 @@ cd d:\Job\PalWorldService
 
 ```yaml
 listen: "0.0.0.0:5080"
+# giteeOwner: arikar
+# giteeRepo: pal-world-service-web-tool
 servers:
   - id: main
     name: 本机帕鲁服务器
@@ -61,24 +68,36 @@ AdminPassword="与 adminPassword 一致"
 | 日志 | 读取服务器日志 |
 | 备份 | 存档 zip 备份/恢复 |
 | 定时任务 | Cron 公告/保存/关闭/备份 |
+| 工具更新 | 从 Gitee Release 检查/一键更新 |
 
-## GitHub 自动 Release
+## 发版（Gitee）
 
-仓库已配置 Actions：打 tag 后自动构建 `PalWorldService-win-x64.zip` 并挂到 Release。
+管理工具更新**只认 Gitee Release** 附件 `PalWorldService-win-x64.zip`。
+
+### 推荐：本机一键发版（国内网络）
 
 ```powershell
-git add .
-git commit -m "..."
-git push
-git tag v1.0.0
-git push origin v1.0.0
+$env:GITEE_TOKEN = "<Gitee私人令牌>"
+.\scripts\release-gitee.ps1 -Version v1.0.14
 ```
 
-或在 GitHub → Actions → **Release** → **Run workflow** 手动触发。
+脚本会：构建前端 → 发布 win-x64 → 打 zip → 推送到 Gitee → 创建 Release 并上传附件。
 
-mini 主机更新：打开仓库 Releases，下载 zip，解压覆盖（保留本机 `config\servers.yaml`），再运行 `start.bat`。
+### 可选：Gitee Go 流水线
 
-详见 `.github/workflows/release.yml`。
+参考 [`.gitee/pipeline/release.yml`](.gitee/pipeline/release.yml)，在 Gitee 仓库「流水线」中导入后，对 `v*` tag 触发构建发版。
+
+### 客户端更新
+
+网页服务器列表 →「检查工具更新」→「下载并更新」。或手动下载 Release zip，解压覆盖（保留本机 `config\servers.yaml`），再运行 `start.bat`。
+
+## 将本地仓库切到 Gitee
+
+```powershell
+git remote remove origin
+git remote add origin https://gitee.com/arikar/pal-world-service-web-tool.git
+git push -u origin main --tags
+```
 
 ## 开发
 
@@ -101,8 +120,10 @@ config/servers.yaml          # 服务器配置
 src/PalWorldService.Shared/  # 配置加载、帕鲁 REST 客户端
 src/PalWorldService.Host/    # 控制台 Host、API 模块、静态前端
 web/                         # Vue3 源码
-scripts/publish.ps1          # 打包
+scripts/publish.ps1          # 本地打包
+scripts/release-gitee.ps1    # 打包并发布到 Gitee Release
 scripts/start.bat            # 启动（随 publish 拷贝）
+.gitee/pipeline/release.yml  # Gitee Go 流水线参考
 ```
 
 扩展新功能见 [docs/EXTENDING.md](docs/EXTENDING.md)。

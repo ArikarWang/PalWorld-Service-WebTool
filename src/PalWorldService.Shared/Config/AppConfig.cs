@@ -7,25 +7,9 @@ public class AppConfig
     public string BackupDirectory { get; set; } = "backups";
     public int MonitorIntervalSeconds { get; set; } = 30;
 
-    /// <summary>
-    /// 管理工具更新源：gitee（默认）| github | auto（先 Gitee 再 GitHub）。
-    /// </summary>
-    public string UpdateSource { get; set; } = "gitee";
-
-    /// <summary>Gitee 更新仓库（国内默认下载源）。</summary>
+    /// <summary>Gitee 更新仓库（管理工具检查/下载更新用）。</summary>
     public string GiteeOwner { get; set; } = "arikar";
     public string GiteeRepo { get; set; } = "pal-world-service-web-tool";
-
-    /// <summary>GitHub 更新仓库（回退或 updateSource=github 时使用）。</summary>
-    public string GithubOwner { get; set; } = "ArikarWang";
-    public string GithubRepo { get; set; } = "PalWorld-Service-WebTool";
-
-    /// <summary>
-    /// 可选。访问 GitHub 的代理前缀（国内网络直连 github.com 超时时配置）。
-    /// 例：https://ghfast.top/ 或 https://ghproxy.net/
-    /// 最终请求形如：{githubProxy}https://github.com/...
-    /// </summary>
-    public string? GithubProxy { get; set; }
 
     public List<ServerConfig> Servers { get; set; } = [];
 }
