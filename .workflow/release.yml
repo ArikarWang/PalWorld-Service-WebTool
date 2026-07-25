@@ -1,5 +1,8 @@
 # Gitee 流水线：推送 v* tag 自动构建并发布
-# 根据失败日志：plugin-24 的 build@nodejs 未自带 npm，故在命令里自装 Node/npm/.NET
+# 说明：
+# - plugin-24 的 build@nodejs 无 npm，改用 build@python 作壳
+# - 打 tag 触发时变量常在 GITEE_BRANCH（如 v1.0.16），不一定有 GITEE_TAG
+# - 打包优先 zip，其次 python/python3
 #
 # 本机备用：
 #   $env:GITEE_TOKEN="..."
@@ -21,7 +24,6 @@ stages:
     strategy: naturally
     trigger: auto
     steps:
-      # 用 python 插件当壳（不依赖镜像自带 npm）；工具链全部命令内安装
       - step: build@python
         name: build_all
         displayName: 安装工具链并打包 win-x64
@@ -31,6 +33,7 @@ stages:
           echo "TAG=${GITEE_TAG:-} BRANCH=${GITEE_BRANCH:-} COMMIT=${GITEE_COMMIT:-}"
           pwd
           ls -la
+          export PATH="/mnt/pipeline-tools/standard/python/3.11.0/bin:${PATH:-}"
 
           # ---- Node 20（npmmirror）----
           NODE_VER=20.11.0
@@ -52,19 +55,23 @@ stages:
           bash /tmp/dotnet-install.sh --channel 8.0 --install-dir "$HOME/.dotnet"
           export DOTNET_ROOT="$HOME/.dotnet"
           export PATH="$HOME/.dotnet:$PATH"
+          export DOTNET_CLI_TELEMETRY_OPTOUT=1
           dotnet --info
 
-          # ---- 版本号：优先 tag，否则读 csproj ----
-          if [ -n "${GITEE_TAG:-}" ]; then
-            VER="${GITEE_TAG#v}"
-            TAG_NAME="$GITEE_TAG"
-          else
+          # ---- 版本：GITEE_TAG 或 BRANCH=v* ----
+          TAG_NAME="${GITEE_TAG:-}"
+          case "${GITEE_BRANCH:-}" in
+            v*) TAG_NAME="${TAG_NAME:-$GITEE_BRANCH}" ;;
+          esac
+          if [ -z "$TAG_NAME" ]; then
             VER="$(sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' src/PalWorldService.Host/PalWorldService.Host.csproj | head -1)"
             TAG_NAME="v${VER}"
+          else
+            VER="${TAG_NAME#v}"
           fi
           echo "VERSION=$VER TAG_NAME=$TAG_NAME"
-          echo "$TAG_NAME" > .release-tag
-          echo "$VER" > .release-version
+          printf '%s\n' "$TAG_NAME" > .release-tag
+          printf '%s\n' "$VER" > .release-version
 
           mkdir -p artifacts/PalWorldService/config
           dotnet publish src/PalWorldService.Host/PalWorldService.Host.csproj \
@@ -75,10 +82,18 @@ stages:
           cp scripts/start.bat artifacts/PalWorldService/start.bat
           test -f artifacts/PalWorldService/PalWorldService.exe
 
-          python3 - <<'PY'
+          # ---- 打 zip（不依赖 python3 命令名）----
+          rm -f artifacts/PalWorldService-win-x64.zip PalWorldService-win-x64.zip
+          if command -v zip >/dev/null 2>&1; then
+            (cd artifacts/PalWorldService && zip -qr ../PalWorldService-win-x64.zip .)
+          else
+            PY="$(command -v python3 || command -v python || true)"
+            test -n "$PY"
+            "$PY" - <<'PY'
           import shutil
           shutil.make_archive("artifacts/PalWorldService-win-x64", "zip", "artifacts/PalWorldService")
           PY
+          fi
           cp artifacts/PalWorldService-win-x64.zip ./PalWorldService-win-x64.zip
           ls -lh PalWorldService-win-x64.zip .release-tag
         artifacts:
@@ -95,11 +110,11 @@ stages:
       - step: release@gitee
         name: release_gitee
         displayName: Gitee Release
-        # 手动跑 main 时 GITEE_TAG 为空；用 allowUpdate + 构建产物里的 tag 更稳
-        # 若插件只认 ${GITEE_TAG}，请用「推送 tag」触发，不要手动跑 main
-        releaseName: PalWorld Service ${GITEE_TAG}
-        description: PalWorld Service ${GITEE_TAG}
-        tagName: ${GITEE_TAG}
+        # tag 触发时 Gitee 常把 tag 放在 GITEE_BRANCH；插件若只认 GITEE_TAG，
+        # 下面用 ${GITEE_BRANCH} 更贴近当前日志表现
+        releaseName: PalWorld Service ${GITEE_BRANCH}
+        description: PalWorld Service ${GITEE_BRANCH}
+        tagName: ${GITEE_BRANCH}
         upstreamArtifact:
           - PLUGIN_RELEASE
         assertFiles:
