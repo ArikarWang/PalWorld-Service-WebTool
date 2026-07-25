@@ -26,8 +26,9 @@
       <h3>管理工具更新</h3>
       <p class="meta" style="margin-bottom: var(--space-3)">
         当前版本 <strong class="mono">{{ toolVersion || '…' }}</strong>。
-        可检查 GitHub Release；有更新时可一键下载并自动重启（保留 config/servers.yaml）。
-        若提示无法连接 GitHub，可在 servers.yaml 配置 <code>githubProxy</code>（如 https://ghfast.top/）；不配也会自动尝试公共加速。
+        默认从 Gitee Release 检查/下载更新；有更新时可一键安装并自动重启（保留 config/servers.yaml）。
+        仓库：<code>gitee.com/arikar/pal-world-service-web-tool</code>。
+        如需回退可在 servers.yaml 设置 <code>updateSource: auto</code> 或 <code>github</code>。
       </p>
       <div class="btn-row">
         <button class="btn" :disabled="checkingTool || applying" @click="checkToolUpdate">

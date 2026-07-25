@@ -8,8 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace PalWorldService.Host.Services;
 
 /// <summary>
-/// Downloads the latest GitHub Release zip, stages it, then launches a helper that
-/// replaces files after this process exits and restarts start.bat.
+/// Downloads the latest Release zip (Gitee first, GitHub fallbacks), stages it,
+/// then launches a helper that replaces files after this process exits and restarts start.bat.
 /// </summary>
 public class ToolSelfUpdateService
 {
@@ -36,9 +36,11 @@ public class ToolSelfUpdateService
             throw new InvalidOperationException(check.Message ?? "无法检查更新。");
         if (!check.UpdateAvailable)
             throw new InvalidOperationException("当前已是最新版本，无需更新。");
-        if (string.IsNullOrWhiteSpace(check.DownloadUrl))
+
+        var urls = BuildDownloadCandidates(check);
+        if (urls.Count == 0)
             throw new InvalidOperationException(
-                $"最新 Release 未找到资源 {ReleaseAssetName}，请手动从 GitHub 下载。");
+                $"最新 Release 未找到资源 {ReleaseAssetName}，请手动从 Gitee/GitHub 下载。");
 
         var installDir = Path.GetFullPath(AppContext.BaseDirectory.TrimEnd(
             Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -53,21 +55,40 @@ public class ToolSelfUpdateService
             Directory.Delete(stagingDir, true);
         Directory.CreateDirectory(stagingDir);
 
-        _logger.LogInformation(
-            "Downloading tool update {Version} from {Url}",
-            check.LatestVersion,
-            check.DownloadUrl);
-
-        try
+        Exception? lastError = null;
+        var tried = new List<string>();
+        foreach (var url in urls)
         {
-            await DownloadAsync(check.DownloadUrl!, zipPath, ct);
+            try
+            {
+                _logger.LogInformation(
+                    "Downloading tool update {Version} from {Url}",
+                    check.LatestVersion,
+                    url);
+                if (File.Exists(zipPath))
+                    File.Delete(zipPath);
+                await DownloadAsync(url, zipPath, ct);
+                lastError = null;
+                break;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                tried.Add($"{url} => {ex.Message}");
+                _logger.LogWarning(ex, "Download failed from {Url}", url);
+            }
         }
-        catch (Exception ex)
+
+        if (lastError is not null || !File.Exists(zipPath))
         {
-            throw new InvalidOperationException(ToolUpdateCheckService.FormatNetworkError(ex).Replace(
-                "检查管理工具更新失败：",
-                "下载更新失败：",
-                StringComparison.Ordinal), ex);
+            var detail = string.Join(" | ", tried.Take(3));
+            throw new InvalidOperationException(
+                ToolUpdateCheckService.FormatNetworkError(lastError ?? new IOException("下载失败")).Replace(
+                    "检查管理工具更新失败：",
+                    "下载更新失败：",
+                    StringComparison.Ordinal) +
+                (detail.Length > 0 ? $" 尝试：{detail}" : ""),
+                lastError);
         }
 
         ExtractZip(zipPath, stagingDir);
@@ -97,6 +118,26 @@ public class ToolSelfUpdateService
             LogPath: logPath);
     }
 
+    private static List<string> BuildDownloadCandidates(ToolUpdateCheckResult check)
+    {
+        var urls = new List<string>();
+        void Add(string? u)
+        {
+            if (string.IsNullOrWhiteSpace(u)) return;
+            if (urls.Any(x => string.Equals(x, u, StringComparison.OrdinalIgnoreCase))) return;
+            urls.Add(u);
+        }
+
+        if (check.DownloadUrls is { Count: > 0 })
+        {
+            foreach (var u in check.DownloadUrls)
+                Add(u);
+        }
+
+        Add(check.DownloadUrl);
+        return urls;
+    }
+
     private async Task DownloadAsync(string url, string zipPath, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient("GitHubDownload");
@@ -112,6 +153,10 @@ public class ToolSelfUpdateService
         await using var input = await response.Content.ReadAsStreamAsync(ct);
         await using var output = File.Create(zipPath);
         await input.CopyToAsync(output, ct);
+
+        var info = new FileInfo(zipPath);
+        if (info.Length < 1024)
+            throw new InvalidOperationException($"下载文件过小（{info.Length} bytes），可能不是有效安装包。");
     }
 
     private static void ExtractZip(string zipPath, string stagingDir)
