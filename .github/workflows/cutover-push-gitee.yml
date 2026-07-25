@@ -1,13 +1,16 @@
 name: Cutover push to Gitee
 
-# Only runs when THIS file changes (or manual dispatch). Not on normal code pushes.
-# Used to finish mirroring after GitHub auto-sync was removed.
+# Path-filtered / dispatch only. This revision removes GitHub↔Gitee bridge
+# workflows from the tree, then force-pushes the result to Gitee (and main).
 on:
   push:
     branches: [main]
     paths:
       - ".github/workflows/cutover-push-gitee.yml"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   push:
@@ -17,8 +20,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Force-push main to Gitee
+      - name: Drop bridge workflows and push to Gitee + GitHub main
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
@@ -27,7 +31,24 @@ jobs:
             echo "GITEE_TOKEN secret missing"
             exit 1
           fi
+
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+          rm -f .github/workflows/cutover-push-gitee.yml
+          rm -f .github/workflows/manual-mirror-gitee.yml
+          # Keep .github dir if other files remain; otherwise leave empty dir out of git
+          if [ -d .github/workflows ] && [ -z "$(ls -A .github/workflows)" ]; then
+            rmdir .github/workflows || true
+          fi
+
+          if git status --porcelain | grep -q .; then
+            git add -A
+            git commit -m "chore: remove GitHub↔Gitee bridge workflows (Gitee-only)"
+          fi
+
           git remote remove gitee 2>/dev/null || true
           git remote add gitee "https://oauth2:${GITEE_TOKEN}@gitee.com/arikar/pal-world-service-web-tool.git"
           git push gitee HEAD:refs/heads/main --force
-          echo "Synced to https://gitee.com/arikar/pal-world-service-web-tool"
+          git push origin HEAD:refs/heads/main
+          echo "Gitee-only cutover complete."
