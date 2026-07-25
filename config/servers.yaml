@@ -5,8 +5,9 @@ monitorIntervalSeconds: 30
 # 管理工具更新检查（GitHub Releases），一般无需修改
 # githubOwner: ArikarWang
 # githubRepo: PalWorld-Service-WebTool
-# 国内无法直连 github.com 时配置代理前缀（用于检查/下载更新）
-# githubProxy: "https://ghproxy.net/"
+# 国内无法直连 github.com 时可选配置代理前缀（也可不配：程序会自动尝试公共加速）
+# 推荐：https://ghfast.top/ 或 https://ghproxy.net/
+# githubProxy: "https://ghfast.top/"
 
 servers:
   - id: main
