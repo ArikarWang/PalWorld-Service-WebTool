@@ -146,9 +146,11 @@ src/PalWorldService.Host/    # 控制台 Host、API 模块、静态前端
 web/                         # Vue3 源码
 scripts/publish.ps1          # 本地打包
 scripts/release-gitee.ps1    # 打包并发布到 Gitee Release
+scripts/set-remote-gitee.ps1 # 将 git origin 指到 Gitee
 scripts/start.bat            # 启动（随 publish 拷贝）
 .workflow/release.yml        # Gitee 流水线（推送 v* tag 自动发版）
 ```
+
 
 
 扩展新功能见 [docs/EXTENDING.md](docs/EXTENDING.md)。
