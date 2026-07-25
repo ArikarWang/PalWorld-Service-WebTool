@@ -1,12 +1,9 @@
 # Gitee 流水线：推送 v* tag 自动构建并发布
-# 说明：
-# - plugin-24 的 build@nodejs 无 npm，改用 build@python 作壳
-# - 打 tag 触发时变量常在 GITEE_BRANCH（如 v1.0.16），不一定有 GITEE_TAG
-# - 打包优先 zip，其次 python/python3
+# 注意：不要把 PATH 收成只含插件目录，否则会丢 curl/zip 等系统命令
 #
 # 本机备用：
 #   $env:GITEE_TOKEN="..."
-#   .\scripts\release-gitee.ps1 -Version v1.0.16
+#   .\scripts\release-gitee.ps1 -Version v1.0.18
 
 version: '1.0'
 name: release-win-x64
@@ -33,11 +30,31 @@ stages:
           echo "TAG=${GITEE_TAG:-} BRANCH=${GITEE_BRANCH:-} COMMIT=${GITEE_COMMIT:-}"
           pwd
           ls -la
-          export PATH="/mnt/pipeline-tools/standard/python/3.11.0/bin:${PATH:-}"
+
+          # 始终保留系统 PATH，再前置插件 Python
+          export PATH="/mnt/pipeline-tools/standard/python/3.11.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          command -v curl || command -v wget || command -v python
+          command -v tar
+          uname -a
+
+          download() {
+            url="$1"
+            out="$2"
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "$url" -o "$out"
+            elif command -v wget >/dev/null 2>&1; then
+              wget -qO "$out" "$url"
+            else
+              python - <<PY
+          import urllib.request
+          urllib.request.urlretrieve("$url", "$out")
+          PY
+            fi
+          }
 
           # ---- Node 20（npmmirror）----
           NODE_VER=20.11.0
-          curl -fsSL "https://npmmirror.com/mirrors/node/v${NODE_VER}/node-v${NODE_VER}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+          download "https://npmmirror.com/mirrors/node/v${NODE_VER}/node-v${NODE_VER}-linux-x64.tar.xz" /tmp/node.tar.xz
           mkdir -p "$HOME/node"
           tar -xJf /tmp/node.tar.xz -C "$HOME/node" --strip-components=1
           export PATH="$HOME/node/bin:$PATH"
@@ -51,7 +68,7 @@ stages:
           cd ..
 
           # ---- .NET 8 ----
-          curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+          download https://dot.net/v1/dotnet-install.sh /tmp/dotnet-install.sh
           bash /tmp/dotnet-install.sh --channel 8.0 --install-dir "$HOME/.dotnet"
           export DOTNET_ROOT="$HOME/.dotnet"
           export PATH="$HOME/.dotnet:$PATH"
@@ -82,13 +99,12 @@ stages:
           cp scripts/start.bat artifacts/PalWorldService/start.bat
           test -f artifacts/PalWorldService/PalWorldService.exe
 
-          # ---- 打 zip（不依赖 python3 命令名）----
+          # ---- 打 zip ----
           rm -f artifacts/PalWorldService-win-x64.zip PalWorldService-win-x64.zip
           if command -v zip >/dev/null 2>&1; then
             (cd artifacts/PalWorldService && zip -qr ../PalWorldService-win-x64.zip .)
           else
-            PY="$(command -v python3 || command -v python || true)"
-            test -n "$PY"
+            PY="$(command -v python3 || command -v python)"
             "$PY" - <<'PY'
           import shutil
           shutil.make_archive("artifacts/PalWorldService-win-x64", "zip", "artifacts/PalWorldService")
@@ -110,8 +126,6 @@ stages:
       - step: release@gitee
         name: release_gitee
         displayName: Gitee Release
-        # tag 触发时 Gitee 常把 tag 放在 GITEE_BRANCH；插件若只认 GITEE_TAG，
-        # 下面用 ${GITEE_BRANCH} 更贴近当前日志表现
         releaseName: PalWorld Service ${GITEE_BRANCH}
         description: PalWorld Service ${GITEE_BRANCH}
         tagName: ${GITEE_BRANCH}
