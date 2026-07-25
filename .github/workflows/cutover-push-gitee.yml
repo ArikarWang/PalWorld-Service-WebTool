@@ -1,0 +1,33 @@
+name: Cutover push to Gitee
+
+# Only runs when THIS file changes (or manual dispatch). Not on normal code pushes.
+# Used to finish mirroring after GitHub auto-sync was removed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cutover-push-gitee.yml"
+  workflow_dispatch:
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Force-push main to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            echo "GITEE_TOKEN secret missing"
+            exit 1
+          fi
+          git remote remove gitee 2>/dev/null || true
+          git remote add gitee "https://oauth2:${GITEE_TOKEN}@gitee.com/arikar/pal-world-service-web-tool.git"
+          git push gitee HEAD:refs/heads/main --force
+          echo "Synced to https://gitee.com/arikar/pal-world-service-web-tool"
