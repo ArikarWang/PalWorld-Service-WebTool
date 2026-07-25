@@ -38,6 +38,14 @@ function Invoke-GiteeJson {
     return Invoke-RestMethod -Method $Method -Uri $Url -Headers $headers -ContentType "application/json" -Body $json
 }
 
+# Gitee rejects pushes from shallow clones ("shallow update not allowed").
+try {
+    git fetch --unshallow 2>$null | Out-Null
+} catch {}
+try {
+    git fetch --tags --force origin 2>$null | Out-Null
+} catch {}
+
 if (-not (git rev-parse -q --verify "refs/tags/$Version")) {
     Write-Host "Creating local tag $Version"
     git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -49,11 +57,26 @@ Write-Host "Pushing commit/tag to Gitee $owner/$repo ..."
 $remoteUrl = "https://oauth2:${token}@gitee.com/${owner}/${repo}.git"
 git remote remove gitee 2>$null | Out-Null
 git remote add gitee $remoteUrl
-git push gitee "HEAD:refs/heads/$target" --force
-git push gitee "refs/tags/${Version}:refs/tags/${Version}" --force
+
+$pushMain = git push gitee "HEAD:refs/heads/$target" --force 2>&1
+Write-Host $pushMain
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to push branch to Gitee (exit $LASTEXITCODE). If this mentions shallow update, ensure checkout fetch-depth: 0."
+}
+
+$pushTag = git push gitee "refs/tags/${Version}:refs/tags/${Version}" --force 2>&1
+Write-Host $pushTag
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to push tag $Version to Gitee (exit $LASTEXITCODE)."
+}
 
 Write-Host "Ensuring Gitee release $Version ..."
-$releases = Invoke-GiteeJson -Method GET -Url "$apiBase/repos/$owner/$repo/releases?access_token=$token&per_page=100"
+$releases = @()
+try {
+    $releases = @(Invoke-GiteeJson -Method GET -Url "$apiBase/repos/$owner/$repo/releases?access_token=$token&per_page=100")
+} catch {
+    Write-Host "List releases returned empty/error: $($_.Exception.Message)"
+}
 $existing = @($releases | Where-Object { $_.tag_name -eq $Version }) | Select-Object -First 1
 
 $payload = @{
@@ -74,10 +97,9 @@ if ($null -eq $existing) {
 $releaseId = $release.id
 Write-Host "Gitee release id=$releaseId"
 
-# Remove existing same-named attachments
 try {
-    $files = Invoke-GiteeJson -Method GET -Url "$apiBase/repos/$owner/$repo/releases/$releaseId/attach_files?access_token=$token"
-    foreach ($f in @($files)) {
+    $files = @(Invoke-GiteeJson -Method GET -Url "$apiBase/repos/$owner/$repo/releases/$releaseId/attach_files?access_token=$token")
+    foreach ($f in $files) {
         if ($f.name -eq $assetName) {
             Write-Host "Deleting existing attachment $($f.name) ($($f.id))"
             Invoke-GiteeJson -Method DELETE -Url "$apiBase/repos/$owner/$repo/releases/$releaseId/attach_files/$($f.id)?access_token=$token" | Out-Null
