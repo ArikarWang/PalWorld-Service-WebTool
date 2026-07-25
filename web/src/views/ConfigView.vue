@@ -2,12 +2,13 @@
   <div>
     <div class="toolbar">
       <h1>配置文件</h1>
+      <button class="btn" :disabled="busy" @click="browseLocal">浏览本地文件</button>
       <button class="btn" :disabled="busy" @click="load">重新加载</button>
       <button class="btn primary" :disabled="busy || !canSave" @click="save">保存</button>
     </div>
     <p class="hint">
       编辑 PalWorldSettings.ini。下方按 Palworld 1.0 专用服 OptionSettings 全量键（119 项）分组；
-      文件里多出的键会显示在「文件中的额外项」。斑马纹便于对照每一行（含复选框）。
+      文件里多出的键会显示在「文件中的额外项」。鼠标悬停可高亮当前行。
       保存后通常需重启帕鲁服务器才会生效。
     </p>
     <p v-if="parseError" class="error">{{ parseError }}</p>
@@ -150,6 +151,8 @@ import { useRoute } from 'vue-router'
 import { api } from '../api'
 import {
   ALL_FORM_KEYS,
+  FIELD_BY_KEY,
+  inferFieldKind,
   makeUnknownField,
   SETTING_SECTIONS,
   type SettingField,
@@ -254,6 +257,18 @@ async function load() {
   }
 }
 
+async function browseLocal() {
+  busy.value = true
+  try {
+    const res = await api.revealConfig(id())
+    toast(res.path ? `已打开：${res.path}` : '已在资源管理器中打开配置路径', 'success')
+  } catch (e: any) {
+    toast(e.message || String(e), 'error')
+  } finally {
+    busy.value = false
+  }
+}
+
 async function save() {
   busy.value = true
   try {
@@ -261,7 +276,8 @@ async function save() {
     if (parsedOk.value) {
       const map: SettingsMap = {}
       for (const [k, v] of Object.entries(settings)) {
-        map[k] = formatSettingValue(k, v)
+        const kind = FIELD_BY_KEY[k]?.kind ?? inferFieldKind(v)
+        map[k] = formatSettingValue(unwrapValue(v), kind)
       }
       content = rewriteOptionSettings(rawContent.value, map)
       rawContent.value = content
@@ -311,18 +327,15 @@ onMounted(load)
   min-width: 0;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
+  transition: background-color 0.15s ease;
 }
 
 .field-row:last-child {
   border-bottom: none;
 }
 
-.field-row:nth-child(even) {
-  background: color-mix(in srgb, var(--surface2) 88%, var(--surface));
-}
-
 .field-row:hover {
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
 }
 
 .field-row.field-bool {

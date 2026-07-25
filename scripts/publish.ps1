@@ -18,7 +18,7 @@ try {
     Pop-Location
 
     Write-Host ">>> Publishing Host (win-x64 self-contained)..." -ForegroundColor Cyan
-    $verNum = "1.0.16"
+    $verNum = "1.0.19"
     if (-not [string]::IsNullOrWhiteSpace($Version)) {
         $verNum = $Version.Trim().TrimStart("v", "V")
     } else {

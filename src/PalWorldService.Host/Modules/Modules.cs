@@ -268,6 +268,21 @@ public static class ServerOpsModule
             return Results.Ok(new { ok = true });
         });
 
+        g.MapPost("/config/reveal", (string serverId, AppConfigProvider config, LocalOpsService local) =>
+        {
+            var s = config.GetServer(serverId);
+            if (s is null) return Results.NotFound();
+            try
+            {
+                var path = local.RevealConfigInFileManager(s);
+                return Results.Ok(new { ok = true, path });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
         g.MapGet("/logs", async (string serverId, int? lines, AppConfigProvider config, LocalOpsService local, CancellationToken ct) =>
         {
             var s = config.GetServer(serverId);
