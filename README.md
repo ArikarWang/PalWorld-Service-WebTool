@@ -2,7 +2,9 @@
 
 幻兽帕鲁 1.0 专用服务器管理端。控制台窗口运行，浏览器打开使用。配置文件驱动服务器列表，按服网页密码登录。
 
-**代码与发版仓库（主仓库）：** https://gitee.com/arikar/pal-world-service-web-tool
+**代码与发版仓库（唯一远程）：** https://gitee.com/arikar/pal-world-service-web-tool  
+
+日常开发与发版只推 **Gitee**，不再经 GitHub 同步。
 
 ## 快速使用（mini 主机）
 
@@ -97,13 +99,29 @@ $env:GITEE_TOKEN = "<Gitee私人令牌>"
 
 网页服务器列表 →「检查工具更新」→「下载并更新」。或手动下载 Release zip，解压覆盖（保留本机 `config\servers.yaml`），再运行 `start.bat`。
 
-## 将本地仓库切到 Gitee
+## 本地 / 云端：只推 Gitee
 
 ```powershell
+# 一键改 origin
+.\scripts\set-remote-gitee.ps1
+
+# 或手动：
 git remote remove origin
 git remote add origin https://gitee.com/arikar/pal-world-service-web-tool.git
-git push -u origin main --tags
+git push -u origin main
 ```
+
+打 tag 发版（触发 Gitee 流水线）：
+
+```powershell
+git tag v1.0.21
+git push origin v1.0.21
+```
+
+> 若本机/云端需要非交互推送，设置环境变量 `GITEE_TOKEN`（Gitee 私人令牌，需仓库写权限），再用：  
+> `.\scripts\set-remote-gitee.ps1 -Token $env:GITEE_TOKEN`
+
+旧的 GitHub→Gitee 自动同步已移除。GitHub 上仅保留可选的手动 `workflow_dispatch` 镜像（紧急用），日常请不要再往 GitHub 推。
 
 ## 开发
 
