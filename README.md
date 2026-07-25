@@ -87,11 +87,11 @@ $env:GITEE_TOKEN = "<Gitee私人令牌>"
 
 新版流水线读取仓库内 [`.workflow/release.yml`](.workflow/release.yml)：
 
-1. Gitee 仓库打开「流水线」，若弹出「流水线全新升级」→ 点 **现在就升级**
-2. 确认已同步包含 `.workflow/release.yml` 的最新 `main`
-3. 推送 tag（如 `v1.0.15`）后自动构建并上传 `PalWorldService-win-x64.zip`
+1. Gitee 仓库打开「流水线」，确认卡片「发布 win-x64」
+2. 推送 tag（如 `v1.0.16`）后自动：装 .NET → 构建 → 上传 `PalWorldService-win-x64.zip`
+3. 若失败：打开「构建历史」→ 失败步骤日志；常见原因是缺外网拉 SDK / 缺 `release@gitee` 插件
 
-若云端构建环境缺少 .NET/Node，仍用上面的本机 `release-gitee.ps1`。
+云端搞不定时，用上面的本机 `release-gitee.ps1`（国内上传更稳）。
 
 ### 客户端更新
 

@@ -1,8 +1,7 @@
-# Gitee 新版流水线（仓库内 .workflow/*.yml，改完即生效）
-# 触发：推送 tag（v 开头，如 v1.0.15）
-# 作用：构建 PalWorldService-win-x64.zip → 发布到 Gitee Release 附件
+# Gitee 新版流水线：推送 v* tag 后自动构建并发布 Release 附件
+# 失败时请打开「构建历史」把报错步骤日志发出来，便于继续改。
 #
-# 若云端缺少 .NET / zip，可改用本机：
+# 本机备用发版（不依赖流水线）：
 #   $env:GITEE_TOKEN="..."
 #   .\scripts\release-gitee.ps1 -Version v1.0.15
 
@@ -18,45 +17,58 @@ triggers:
 
 stages:
   - stage: build
-    displayName: 构建
+    displayName: 构建打包
     strategy: naturally
     trigger: auto
     steps:
+      # 社区版常见有 build@nodejs；.NET 在同一步里用官方脚本安装，避免缺 build@dotnet 插件
       - step: build@nodejs
-        name: build_frontend
-        displayName: 构建前端
+        name: build_all
+        displayName: 构建前端并打包 win-x64
         nodeVersion: 20.11.0
-        commands:
-          - cd web
-          - npm ci --registry=https://registry.npmmirror.com
-          - npm run build
-        artifacts:
-          - name: WWWROOT
-            path:
-              - src/PalWorldService.Host/wwwroot
-
-      - step: build@dotnet
-        name: build_dotnet
-        displayName: 发布 win-x64
-        dependsOn: build_frontend
         commands: |
-          set -e
+          set -eux
+          echo "TAG=${GITEE_TAG:-} BRANCH=${GITEE_BRANCH:-} COMMIT=${GITEE_COMMIT:-}"
+
+          cd web
+          npm ci --registry=https://registry.npmmirror.com
+          npm run build
+          cd ..
+
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+          bash /tmp/dotnet-install.sh --channel 8.0 --install-dir "$HOME/.dotnet"
+          export DOTNET_ROOT="$HOME/.dotnet"
+          export PATH="$HOME/.dotnet:$PATH"
+          dotnet --info
+
           VER="${GITEE_TAG#v}"
-          if [ -z "$VER" ]; then VER="0.0.${GITEE_PIPELINE_BUILD_NUMBER}"; fi
-          mkdir -p artifacts/PalWorldService
+          if [ -z "$VER" ]; then VER="0.0.${GITEE_PIPELINE_BUILD_NUMBER:-0}"; fi
+          echo "Embedding version: $VER"
+
+          mkdir -p artifacts/PalWorldService/config
           dotnet publish src/PalWorldService.Host/PalWorldService.Host.csproj \
             -c Release -r win-x64 --self-contained true \
-            -p:Version=$VER -p:InformationalVersion=$VER \
+            -p:Version="$VER" -p:InformationalVersion="$VER" \
             -o artifacts/PalWorldService
-          mkdir -p artifacts/PalWorldService/config
           cp config/servers.yaml artifacts/PalWorldService/config/servers.yaml
           cp scripts/start.bat artifacts/PalWorldService/start.bat
-          (cd artifacts/PalWorldService && zip -r ../PalWorldService-win-x64.zip .)
-          ls -lh artifacts/PalWorldService-win-x64.zip
+          test -f artifacts/PalWorldService/PalWorldService.exe
+
+          if command -v zip >/dev/null 2>&1; then
+            (cd artifacts/PalWorldService && zip -qr ../PalWorldService-win-x64.zip .)
+          else
+            python3 - <<'PY'
+          import shutil
+          shutil.make_archive("artifacts/PalWorldService-win-x64", "zip", "artifacts/PalWorldService")
+          PY
+          fi
+
+          cp artifacts/PalWorldService-win-x64.zip ./PalWorldService-win-x64.zip
+          ls -lh PalWorldService-win-x64.zip
         artifacts:
           - name: PLUGIN_RELEASE
             path:
-              - artifacts/PalWorldService-win-x64.zip
+              - PalWorldService-win-x64.zip
 
   - stage: release
     displayName: 发版
@@ -72,6 +84,6 @@ stages:
         upstreamArtifact:
           - PLUGIN_RELEASE
         assertFiles:
-          - artifacts/PalWorldService-win-x64.zip
+          - PalWorldService-win-x64.zip
         prerelease: false
         allowUpdate: true
